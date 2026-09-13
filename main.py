@@ -209,11 +209,7 @@ class BigBanana(Star):
 
     @filter.command("大香蕉人设替换", alias={"人设替换"}, priority=10)
     async def set_persona_description(self, event: AstrMessageEvent):
-        """Save the sender's persona description while preserving reference images.
-
-        Args:
-            event: The message containing the command and free-form description.
-        """
+        """大香蕉人设替换 描述内容"""
         event.stop_event()
         parts = event.message_str.strip().split(maxsplit=1)
         description = parts[1].strip() if len(parts) > 1 else ""
