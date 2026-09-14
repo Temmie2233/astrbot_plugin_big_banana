@@ -294,9 +294,9 @@ function handlePersonaDescriptionInput() {
   var countEl = document.getElementById('persona-modal-count');
   if (!descInput || !countEl) return;
   var count = Array.from(descInput.value.trim()).length;
-  countEl.textContent = count + '/100';
+  countEl.textContent = count + '/200';
   descInput.setCustomValidity(
-    count > 100 ? tr('pages.admin.dynamic.validation.persona_description_too_long', '额外描述不能超过 100 个字符') : ''
+    count > 200 ? tr('pages.admin.dynamic.validation.persona_description_too_long', '额外描述不能超过 200 个字符') : ''
   );
 }
 
@@ -439,8 +439,8 @@ function savePersonaModal() {
     return;
   }
 
-  if (Array.from(description).length > 100) {
-    showToast(tr('pages.admin.dynamic.validation.persona_description_too_long', '额外描述不能超过 100 个字符'));
+  if (Array.from(description).length > 200) {
+    showToast(tr('pages.admin.dynamic.validation.persona_description_too_long', '额外描述不能超过 200 个字符'));
     document.getElementById('persona-modal-description').focus();
     return;
   }
@@ -916,14 +916,14 @@ function saveAll() {
     var targetId = (rule.targetId || '').trim();
     if (!targetId) return;
     var description = (rule.description || '').trim();
-    if (Array.from(description).length > 100) invalidDescription = true;
+    if (Array.from(description).length > 200) invalidDescription = true;
     substitutionsMap[targetId] = {
       images: rule.images || [],
       description: description
     };
   });
   if (invalidDescription) {
-    showToast(tr('pages.admin.dynamic.validation.persona_description_too_long', '额外描述不能超过 100 个字符'));
+    showToast(tr('pages.admin.dynamic.validation.persona_description_too_long', '额外描述不能超过 200 个字符'));
     btnSave.disabled = false;
     btnSave.textContent = tr('pages.admin.actions.save', '💾 保存配置');
     return;

@@ -456,7 +456,7 @@
     <div class="config-card">
       <h2 class="section-title" data-i18n="pages.admin.persona_replace.title">人设替换</h2>
       <div class="hint-text" style="margin-bottom: 20px;" data-i18n="pages.admin.persona_replace.description">
-        为目标用户配置参考头像和最多 100 个字符的额外描述。有参考图片时随机选择一张替换头像；图片列表为空时使用原本头像。LLM 绘图工具引用该用户时，会按图片编号补充描述，再进行副脑优化。
+        为目标用户配置参考头像和最多 200 个字符的额外描述。有参考图片时随机选择一张替换头像；图片列表为空时使用原本头像。LLM 绘图工具引用该用户时，会按图片编号补充描述，再进行副脑优化。
       </div>
 
       <!-- 工具栏：搜索、计数与新建按钮 -->
@@ -504,9 +504,9 @@
         <input type="text" class="text-input" id="persona-modal-target-id" placeholder="输入 QQ 号或 bot / self" data-i18n-placeholder="pages.admin.dynamic.persona.target_placeholder">
       </div>
       <div class="form-group">
-        <label data-i18n="pages.admin.dynamic.persona.description_label">额外描述（最多 100 个字符）</label>
+        <label data-i18n="pages.admin.dynamic.persona.description_label">额外描述（最多 200 个字符）</label>
         <textarea class="textarea-input" id="persona-modal-description" rows="3" placeholder="例如：身高 150cm，体型娇小可爱" data-i18n-placeholder="pages.admin.dynamic.persona.description_placeholder" oninput="handlePersonaDescriptionInput()"></textarea>
-        <div class="hint-text"><span id="persona-modal-count">0/100</span> · <span data-i18n="pages.admin.dynamic.persona.description_hint">可仅填写描述；参考图片列表为空时使用原本头像。描述用于 LLM 绘图工具，并在副脑优化前补充。</span></div>
+        <div class="hint-text"><span id="persona-modal-count">0/200</span> · <span data-i18n="pages.admin.dynamic.persona.description_hint">可仅填写描述；参考图片列表为空时使用原本头像。描述用于 LLM 绘图工具，并在副脑优化前补充。</span></div>
       </div>
       <div class="form-group" style="margin-bottom: 0;">
         <label data-i18n="pages.admin.dynamic.persona.images_label">参考图片列表</label>

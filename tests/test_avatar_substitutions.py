@@ -46,13 +46,13 @@ def test_legacy_rules_and_description_only_rules_survive_save_and_reload(plugin)
     assert plugin.avatar_map == expected
 
 
-@pytest.mark.parametrize("description", ["字" * 100, "😀" * 100])
-def test_accepts_one_hundred_unicode_characters(plugin, description):
+@pytest.mark.parametrize("description", ["字" * 200, "😀" * 200])
+def test_accepts_two_hundred_unicode_characters(plugin, description):
     plugin.update_avatar_substitutions({"123": {"description": description}})
     assert plugin.avatar_map["123"] == {"images": [], "description": description}
 
 
-@pytest.mark.parametrize("description", ["字" * 101, 123, None])
+@pytest.mark.parametrize("description", ["字" * 201, 123, None])
 def test_invalid_description_does_not_overwrite_saved_rules(plugin, description):
     plugin.update_avatar_substitutions({"123": {"description": "原描述"}})
     path = plugin.data_dir / "avatar_substitutions.json"
@@ -92,7 +92,7 @@ def test_command_updates_only_the_sender_and_preserves_images(plugin, command):
     )
 
 
-@pytest.mark.parametrize("description", ["娇小", "字" * 100, "", "字" * 101])
+@pytest.mark.parametrize("description", ["娇小", "字" * 200, "", "字" * 201])
 def test_command_creates_description_only_rule_or_rejects_invalid_input(
     plugin, description
 ):
@@ -107,12 +107,12 @@ def test_command_creates_description_only_rule_or_rejects_invalid_input(
         return [result async for result in plugin.set_persona_description(event)]
 
     results = asyncio.run(run())
-    if 0 < len(description) <= 100:
+    if 0 < len(description) <= 200:
         assert plugin.avatar_map["123"] == {"images": [], "description": description}
         assert "已更新" in results[0]
     else:
         assert plugin.avatar_map == {}
-        assert "100" in results[0]
+        assert "200" in results[0]
         assert not (plugin.data_dir / "avatar_substitutions.json").exists()
 
 
@@ -169,7 +169,7 @@ def test_web_api_round_trips_persona_rules_and_rejects_overlong_description(plug
         response = await client.get("/substitutions")
         assert (await response.get_json())["data"] == body
         response = await client.post(
-            "/substitutions", json={"123": {"description": "字" * 101}}
+            "/substitutions", json={"123": {"description": "字" * 201}}
         )
         assert (await response.get_json())["status"] == "error"
         response = await client.get("/substitutions")

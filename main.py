@@ -175,8 +175,8 @@ class BigBanana(Star):
                 if not isinstance(description, str):
                     raise ValueError(f"{user_id} 的额外描述必须是文本")
                 description = description.strip()
-                if len(description) > 100:
-                    raise ValueError(f"{user_id} 的额外描述不能超过 100 个字符")
+                if len(description) > 200:
+                    raise ValueError(f"{user_id} 的额外描述不能超过 200 个字符")
                 value = value.get("images", [])
             if isinstance(value, str):
                 value = [value]
@@ -215,11 +215,11 @@ class BigBanana(Star):
         description = parts[1].strip() if len(parts) > 1 else ""
         if not description:
             yield event.plain_result(
-                "用法：/大香蕉人设替换 描述内容（最多 100 个字符）"
+                "用法：/大香蕉人设替换 描述内容（最多 200 个字符）"
             )
             return
-        if len(description) > 100:
-            yield event.plain_result("❌ 额外描述不能超过 100 个字符，请缩短后重试。")
+        if len(description) > 200:
+            yield event.plain_result("❌ 额外描述不能超过 200 个字符，请缩短后重试。")
             return
         user_id = event.get_sender_id()
         if not user_id:
