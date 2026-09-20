@@ -52,6 +52,9 @@ class DrawingCommandHandler:
         params = parse_params(self.plugin, event)
         if params is None:
             return
+        logger.info(
+            f"[BIG BANANA] 命中绘图指令，提示词: {params.get('prompt', '')[:60]!r}"
+        )
 
         # 检查白名单
         access_check = self.plugin.whitelist_guard.check(event, is_command=True)
@@ -83,6 +86,9 @@ class DrawingCommandHandler:
         current_task = asyncio.current_task()
         if current_task:
             self.plugin.task_manager.start(task_id, current_task)
+
+        # 指令一经受理即开始计算冷却，避免生成期间被反复触发
+        self.plugin.cooldown_guard.mark_cooldown(event)
 
         try:
             # 提交绘图任务
@@ -206,22 +212,25 @@ class DrawingCommandHandler:
                 if not prompt.strip():
                     prompt = "draw a picture"
                     params["prompt"] = prompt
+                prompt = collector.apply_prompt_image_references(prompt)
+                params["prompt"] = prompt
+                # 添加at头像备注。必须在副脑优化前补充，让副脑理解
+                # image N 对应的原图或 @头像，避免引用被改写或丢失。
+                if self.plugin.preference_config.enable_at_avatar_note:
+                    collector.refresh_avatar_supplement_infos()
+                    params["prompt"] = self._append_image_supplement_note(
+                        params["prompt"], collector.image_supplement_infos
+                    )
                 if prompt and params.get(
                     "sub_brain", self.plugin.sub_brain_config.cmd_enabled
-                ):
+                ) and params.get("capability", "image_generation") != "video_generation":
                     optimized_prompt = (
                         await self.plugin.sub_brain_optimizer.optimize_prompt(
-                            event, prompt
+                            event, params["prompt"]
                         )
                     )
                     if optimized_prompt is not None:
                         params["prompt"] = optimized_prompt
-                # 添加at头像备注
-                if self.plugin.preference_config.enable_at_avatar_note:
-                    params["prompt"] = self._append_image_supplement_note(
-                        params.get("prompt", "draw a picture"),
-                        collector.image_supplement_infos,
-                    )
                 # Route the request through the matching media pipeline.
                 if params.get("capability", "image_generation") == "video_generation":
                     result = await self.plugin.video_pipeline.run(
@@ -249,8 +258,6 @@ class DrawingCommandHandler:
                     is_command=True,
                 )
             else:
-                # 成功，标记冷却时间
-                self.plugin.cooldown_guard.mark_cooldown(event.get_group_id())
                 # 构建消息链
                 msg_chain = build_result_message_chain(
                     event,
@@ -263,9 +270,6 @@ class DrawingCommandHandler:
                     temp_dir=self.plugin.temp_dir,
                 )
 
-            # 包装消息链类型
-            msg_chain_obj = MessageChain(msg_chain)
-
             # 根据前台后台任务决定发送消息的方式
             if (
                 self.plugin.preference_config.command_use_background_task
@@ -273,11 +277,11 @@ class DrawingCommandHandler:
             ):
                 # 后台任务且配置为主动消息发送
                 await self.plugin.context.send_message(
-                    event.unified_msg_origin, msg_chain_obj
+                    event.unified_msg_origin, MessageChain(msg_chain)
                 )
             else:
                 # 同步任务，或后台任务且配置为事件消息发送（默认）
-                await event.send(msg_chain_obj)
+                await event.send(event.chain_result(msg_chain))
         finally:
             # 任务结束，清理
             if self.plugin.preference_config.command_use_background_task:
@@ -300,8 +304,8 @@ class DrawingCommandHandler:
             return prompt
         image_supplement_text = "\n".join(image_supplement_infos)
         at_avatar_note = (
-            "The following @-mention avatar references correspond to the final "
-            "input image list. Image indices start from 1:\n"
+            "Reference images in the final input image list "
+            "(indices start from 1):\n"
             f"{image_supplement_text}"
         )
         prompt = prompt.rstrip()

@@ -104,3 +104,22 @@ def test_rejects_invalid_flash_parameters() -> None:
     _body, error = provider._build_body()
 
     assert error == "fps 仅支持 30 或 60"
+
+
+def test_truncates_prompt_over_512_characters() -> None:
+    provider = build_provider({"prompt": "word " * 200})
+
+    body, error = provider._build_body()
+
+    assert error is None
+    assert len(body["prompt"]) <= 512
+    assert body["prompt"] == body["prompt"].strip()
+
+
+def test_truncates_prompt_without_spaces() -> None:
+    provider = build_provider({"prompt": "字" * 600})
+
+    body, error = provider._build_body()
+
+    assert error is None
+    assert len(body["prompt"]) == 512

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import random
 import re
-from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,7 +12,11 @@ from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
 
 from ..schemas import SUPPORTED_FILE_FORMATS_WITH_DOT
 from ..utils import get_message_id
-from .mention_utils import QQ_OFFICIAL_MENTION_RE, get_qq_official_mention_names
+from .mention_utils import (
+    QQ_OFFICIAL_MENTION_RE,
+    format_mention,
+    get_qq_official_mention_names,
+)
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
@@ -46,8 +49,8 @@ class ImageCollector:
 
         # 将用户 ID 映射到对应头像在 images 中的位置（从 1 开始）。
         self.avatar_mappings: dict[str, int] = {}
-        # 记录头像对应的昵称，用于生成提示词中的头像说明。
-        self.avatar_nicknames: dict[str, str] = {}
+        # 记录消息中出现过的 @ 引用（user_id, nickname），含未收集到头像的引用。
+        self.mention_refs: list[tuple[str, str | None]] = []
         # 图片下载/读取后的缓存对象
         self.images: list[ImageResource] = []
 
@@ -173,6 +176,8 @@ class ImageCollector:
                 continue
 
             for user_id, nickname in avatar_mentions:
+                if user_id:
+                    self.mention_refs.append((user_id, nickname))
                 self_id = event.get_self_id()
                 if not skipped_at_avatar and (
                     # 如果At对象是被引用消息的发送者，跳过一次
@@ -193,9 +198,7 @@ class ImageCollector:
                     if avatar_url:
                         added, _ = await self._process_and_add_image(avatar_url)
                         if added:
-                            self._record_avatar_image(
-                                user_id, len(self.images), nickname
-                            )
+                            self._record_avatar_image(user_id, len(self.images))
 
     async def supplement_avatars(self) -> None:
         """补充可获取的用户头像。"""
@@ -277,6 +280,36 @@ class ImageCollector:
             _, error = await self._process_and_add_image(image_ref)
             if error:
                 self._record_reference_failure(ref, error)
+
+    def apply_prompt_image_references(self, prompt: str) -> str:
+        """把提示词中的 @用户 引用改写为 image N，未命中头像的引用直接移除。"""
+        if not prompt or not self.mention_refs:
+            return prompt
+
+        users_by_nickname: dict[str, set[str]] = {}
+        for user_id, nickname in self.mention_refs:
+            if nickname:
+                users_by_nickname.setdefault(nickname, set()).add(user_id)
+        duplicate_nicknames = {
+            nickname
+            for nickname, user_ids in users_by_nickname.items()
+            if len(user_ids) > 1
+        }
+
+        replacements: list[tuple[str, str]] = []
+        for user_id, nickname in self.mention_refs:
+            token = "@" + format_mention(user_id, nickname, duplicate_nicknames)
+            image_index = self.avatar_mappings.get(user_id)
+            replacements.append(
+                (token, f"image {image_index}" if image_index else "")
+            )
+
+        # 长引用先替换，避免 @小团 抢先命中 @小团团 的前缀。
+        for token, replacement in sorted(
+            replacements, key=lambda item: len(item[0]), reverse=True
+        ):
+            prompt = prompt.replace(token, replacement)
+        return re.sub(r"[ \t]{2,}", " ", prompt).strip()
 
     async def _get_avatar_url(
         self, user_id: str, event: AstrMessageEvent
@@ -445,18 +478,11 @@ class ImageCollector:
                 return value
         return None
 
-    def _record_avatar_image(
-        self,
-        user_id: str,
-        image_index: int,
-        nickname: str | None = None,
-    ) -> None:
+    def _record_avatar_image(self, user_id: str, image_index: int) -> None:
         """记录用户头像对应的图片位置。"""
         if user_id in self.avatar_mappings:
             return
         self.avatar_mappings[user_id] = image_index
-        if nickname:
-            self.avatar_nicknames[user_id] = nickname
         if self.is_llm_tool:
             description = self.plugin.avatar_map.get(user_id, {}).get("description", "")
             if description:
@@ -464,22 +490,37 @@ class ImageCollector:
                     f"- image{image_index}：{description}"
                 )
             return
-        self._refresh_avatar_supplement_infos()
+        self.refresh_avatar_supplement_infos()
 
-    def _refresh_avatar_supplement_infos(self) -> None:
-        nickname_counts = Counter(self.avatar_nicknames.values())
+    def refresh_avatar_supplement_infos(self) -> None:
+        """重建命令链路的图片编号说明，标注头像归属与非头像参考图。"""
+        users_by_nickname: dict[str, set[str]] = {}
+        for user_id, nickname in self.mention_refs:
+            if nickname:
+                users_by_nickname.setdefault(nickname, set()).add(user_id)
         duplicate_nicknames = {
-            nickname for nickname, count in nickname_counts.items() if count > 1
+            nickname
+            for nickname, user_ids in users_by_nickname.items()
+            if len(user_ids) > 1
         }
-        self.image_supplement_infos = [
-            (
-                f"- @{nickname}({user_id}): avatar is image {image_index}"
-                if (nickname := self.avatar_nicknames.get(user_id))
-                and nickname in duplicate_nicknames
-                else f"- @{nickname or user_id}: avatar is image {image_index}"
-            )
+        nicknames = {
+            user_id: format_mention(user_id, nickname, duplicate_nicknames)
+            for user_id, nickname in self.mention_refs
+        }
+        avatar_owners = {
+            image_index: user_id
             for user_id, image_index in self.avatar_mappings.items()
-        ]
+        }
+
+        lines: list[str] = []
+        for image_index in range(1, len(self.images) + 1):
+            user_id = avatar_owners.get(image_index)
+            if user_id is None:
+                lines.append(f"- image {image_index}: reference image (not an avatar)")
+                continue
+            nickname = nicknames.get(user_id) or user_id
+            lines.append(f"- image {image_index}: @-mention avatar of @{nickname}")
+        self.image_supplement_infos = lines
 
     def _record_reference_failure(self, reference: str | Path, reason: str) -> None:
         failure = f"参考图 {reference!s} 处理失败：{reason}"

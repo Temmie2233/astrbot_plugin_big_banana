@@ -267,6 +267,15 @@
         <div class="hint-text" data-i18n="pages.admin.trigger.preferences.group_cooldown_hint">控制每个群组使用画画命令或工具的冷却间隔时间，0 为不限制。</div>
       </div>
 
+      <div class="form-group">
+        <label for="pref_user_cooldown" data-i18n="pages.admin.trigger.preferences.user_cooldown">个人画图冷却时间 (秒)</label>
+        <div class="slider-container">
+          <input type="range" class="slider-input" id="pref_user_cooldown" min="0" max="600" step="5" oninput="updateSliderValue(this)">
+          <span class="slider-value" id="val-pref_user_cooldown">0s</span>
+        </div>
+        <div class="hint-text" data-i18n="pages.admin.trigger.preferences.user_cooldown_hint">控制每个用户在同一群聊或私聊会话内的冷却间隔时间，0 为不限制；与群组冷却同时生效。</div>
+      </div>
+
       <div class="form-group checkbox-row">
         <label for="pref_use_background_task" data-i18n="pages.admin.trigger.preferences.use_background_task">使用后台任务执行绘图</label>
         <label class="switch">

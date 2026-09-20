@@ -204,7 +204,10 @@ def test_add_msg_images_records_only_the_at_image_position(tmp_path: Path) -> No
         ImageCollector.qq_avatar_url("123"),
     ]
     assert collector.avatar_mappings == {"123": 2}
-    assert collector.image_supplement_infos == ["- @Alice: avatar is image 2"]
+    assert collector.image_supplement_infos == [
+        "- image 1: reference image (not an avatar)",
+        "- image 2: @-mention avatar of @Alice",
+    ]
 
 
 def test_add_msg_images_extracts_qq_official_mentions_from_plain_text(
@@ -264,8 +267,8 @@ def test_add_msg_images_extracts_qq_official_mentions_from_plain_text(
         "65A887A4AF1BE5639DC11C46B052276A": 2,
     }
     assert collector.image_supplement_infos == [
-        "- @Alice: avatar is image 1",
-        "- @Bob: avatar is image 2",
+        "- image 1: @-mention avatar of @Alice",
+        "- image 2: @-mention avatar of @Bob",
     ]
 
 
@@ -292,9 +295,120 @@ def test_add_msg_images_disambiguates_duplicate_avatar_nicknames(
     asyncio.run(collector.add_msg_images())
 
     assert collector.image_supplement_infos == [
-        "- @Alice(123): avatar is image 1",
-        "- @Alice(456): avatar is image 2",
+        "- image 1: @-mention avatar of @Alice(123)",
+        "- image 2: @-mention avatar of @Alice(456)",
     ]
+
+
+def test_apply_prompt_image_references_replaces_mapped_mentions(
+    tmp_path: Path,
+) -> None:
+    event = build_event()
+    event.message_obj = SimpleNamespace(message_id="message-1")
+    event.get_messages = lambda: [Comp.At(qq="123", name="Alice")]
+    event.get_self_id = lambda: "999"
+    event.is_at_or_wake_command = False
+    plugin = build_plugin(
+        tmp_path,
+        fetched_results=[ImageResource("image/png", b"avatar-image")],
+    )
+    collector = ImageCollector(plugin=plugin, event=event, params={})
+
+    asyncio.run(collector.add_msg_images())
+
+    assert (
+        collector.apply_prompt_image_references("画一张 @Alice 的图")
+        == "画一张 image 1 的图"
+    )
+    assert (
+        collector.apply_prompt_image_references("没有引用的提示词")
+        == "没有引用的提示词"
+    )
+
+
+def test_apply_prompt_image_references_removes_unmapped_mentions(
+    tmp_path: Path,
+) -> None:
+    event = build_event()
+    event.message_obj = SimpleNamespace(message_id="message-1")
+    event.get_messages = lambda: [
+        Comp.At(qq="999", name="Bot"),
+        Comp.At(qq="123", name="Alice"),
+    ]
+    event.get_self_id = lambda: "999"
+    event.is_at_or_wake_command = True
+    plugin = build_plugin(
+        tmp_path,
+        fetched_results=[ImageResource("image/png", b"avatar-image")],
+    )
+    plugin.preference_config.skip_at_first = True
+    collector = ImageCollector(plugin=plugin, event=event, params={})
+
+    asyncio.run(collector.add_msg_images())
+
+    assert collector.avatar_mappings == {"123": 1}
+    assert (
+        collector.apply_prompt_image_references("画一张 @Bot @Alice 的图")
+        == "画一张 image 1 的图"
+    )
+
+
+def test_apply_prompt_image_references_disambiguates_duplicate_nicknames(
+    tmp_path: Path,
+) -> None:
+    event = build_event()
+    event.message_obj = SimpleNamespace(message_id="message-1")
+    event.get_messages = lambda: [
+        Comp.At(qq="123", name="Alice"),
+        Comp.At(qq="456", name="Alice"),
+    ]
+    event.get_self_id = lambda: "999"
+    event.is_at_or_wake_command = False
+    plugin = build_plugin(
+        tmp_path,
+        fetched_results=[
+            ImageResource("image/png", b"first-avatar"),
+            ImageResource("image/png", b"second-avatar"),
+        ],
+    )
+    collector = ImageCollector(plugin=plugin, event=event, params={})
+
+    asyncio.run(collector.add_msg_images())
+
+    assert (
+        collector.apply_prompt_image_references(
+            "画一张 @Alice(123) 抱着 @Alice(456) 的图"
+        )
+        == "画一张 image 1 抱着 image 2 的图"
+    )
+
+
+def test_apply_prompt_image_references_prefers_longer_tokens(
+    tmp_path: Path,
+) -> None:
+    event = build_event()
+    event.message_obj = SimpleNamespace(message_id="message-1")
+    event.get_messages = lambda: [
+        Comp.At(qq="123", name="小团"),
+        Comp.At(qq="456", name="小团团"),
+    ]
+    event.get_self_id = lambda: "999"
+    event.is_at_or_wake_command = False
+    plugin = build_plugin(
+        tmp_path,
+        fetched_results=[
+            ImageResource("image/png", b"first-avatar"),
+            ImageResource("image/png", b"second-avatar"),
+        ],
+    )
+    collector = ImageCollector(plugin=plugin, event=event, params={})
+
+    asyncio.run(collector.add_msg_images())
+
+    assert (
+        collector.apply_prompt_image_references("画一张 @小团团 和 @小团 的图")
+        == "画一张 image 2 和 image 1 的图"
+    )
 
 
 def test_different_references_with_same_content_are_collected_separately(
@@ -555,7 +669,8 @@ def test_llm_tool_custom_url_restriction(tmp_path: Path) -> None:
         check=lambda event, is_command: SimpleNamespace(allowed=True)
     )
     plugin.cooldown_guard = SimpleNamespace(
-        check=lambda event: SimpleNamespace(allowed=True)
+        check=lambda event: SimpleNamespace(allowed=True),
+        mark_cooldown=lambda *a, **k: None,
     )
 
     tool = BigBananaImageGenerationTool()

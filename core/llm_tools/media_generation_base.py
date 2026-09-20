@@ -147,8 +147,6 @@ class BaseMediaGenerationTool(FunctionTool[AstrAgentContext], ABC):
                 params,
                 image_references,
             )
-            if not result.error_message:
-                plugin.cooldown_guard.mark_cooldown(event.get_group_id())
 
             if use_background_callback:
                 handled = await plugin.background_callback.dispatch(

@@ -19,6 +19,10 @@ class CommonConfig:
     """代理"""
     strip_metadata: bool = True
     """是否在图片处理中抹除所有可能带隐私的元数据"""
+    video_transcode: bool = True
+    """是否用 ffmpeg 把生成的视频转成平台友好的 H.264/CFR mp4（需系统安装 ffmpeg）"""
+    ffmpeg_path: str = ""
+    """ffmpeg 可执行文件绝对路径；留空则在 PATH 中查找"""
 
 
 @dataclass(repr=False, slots=True)
@@ -43,6 +47,10 @@ class PreferenceConfig:
     """ 视频生成中提示消息 """
     group_cooldown: int = 0
     """ 群组冷却时间(秒) """
+    user_cooldown: int = 0
+    """ 个人冷却时间(秒)，同一用户在同一群/会话内独立计时 """
+    admin_skip_cooldown: bool = True
+    """ AstrBot 管理员是否豁免群组与个人冷却 """
     command_use_background_task: bool = False
     """ 命令调用时是否使用后台任务执行绘图 """
     background_task_send_type: str = "event"

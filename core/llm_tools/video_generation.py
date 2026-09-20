@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import mcp
-from pydantic import AnyUrl, Field
+from pydantic import Field
 from pydantic.dataclasses import dataclass
 
 import astrbot.api.message_components as Comp
@@ -58,7 +58,11 @@ class BigBananaVideoGenerationTool(BaseMediaGenerationTool):
     name: str = "banana_video_generation"
     description: str = (
         "Generate a video from text and optionally one reference image. "
-        "Use this tool for both text-to-video and image-to-video requests."
+        "Use this tool for both text-to-video and image-to-video requests. "
+        "Call this tool whenever the user asks you to generate or make a video "
+        "(e.g. 生成视频/做个视频/来段视频). You MUST actually call this tool to do the "
+        "work; never reply that you will generate or are generating a video without "
+        "calling this tool first in the same turn."
     )
     parameters: dict = Field(default_factory=build_video_parameters)
     media_name = "视频"
@@ -83,6 +87,8 @@ class BigBananaVideoGenerationTool(BaseMediaGenerationTool):
         if not cooldown_check.allowed:
             logger.info(cooldown_check.log_message)
             return cooldown_check.message
+        # 工具一经受理即开始计算冷却
+        plugin.cooldown_guard.mark_cooldown(event)
 
         prompt = kwargs.get("prompt", "")
         preset_name = kwargs.get("preset_name")
@@ -211,14 +217,6 @@ class BigBananaVideoGenerationTool(BaseMediaGenerationTool):
             if error:
                 return GenerationResult(error_message=error)
 
-            prompt = params.get("prompt", "")
-            if prompt and params.get("sub_brain", plugin.sub_brain_config.tool_enabled):
-                optimized_prompt = await plugin.sub_brain_optimizer.optimize_prompt(
-                    event, prompt
-                )
-                if optimized_prompt is not None:
-                    params["prompt"] = optimized_prompt
-
             return await plugin.video_pipeline.run(params, image_list=images)
         except Exception as exc:
             logger.error(f"[BIG BANANA] LLM 工具视频生成失败: {exc}", exc_info=True)
@@ -237,7 +235,11 @@ class BigBananaVideoGenerationTool(BaseMediaGenerationTool):
         chain: list[BaseMessageComponent] = [
             Comp.Plain("后台视频生成已完成，以下视频尚未发送给用户。")
         ]
-        chain.extend(Comp.Video.fromURL(video.url) for video in result.videos)
+        for video in result.videos:
+            if video.path:
+                chain.append(Comp.Video(file=str(video.path)))
+            elif video.url:
+                chain.append(Comp.Video.fromURL(video.url))
         return MessageChain(chain=chain)
 
     @staticmethod
@@ -254,13 +256,29 @@ class BigBananaVideoGenerationTool(BaseMediaGenerationTool):
                 text="视频生成已完成，但尚未发送给用户。",
             )
         )
-        response.content.extend(
-            mcp.types.ResourceLink(
-                type="resource_link",
-                name=f"generated_video_{index}",
-                uri=AnyUrl(video.url),
-                mimeType="video/mp4",
-            )
+        indexed_urls = [
+            (index, video.url)
             for index, video in enumerate(result.videos, start=1)
+            if video.url
+        ]
+        if not indexed_urls:
+            response.content[0] = mcp.types.TextContent(
+                type="text",
+                text="视频生成已完成，但没有可供发送的视频 URL。请如实告知用户。",
+            )
+            return response
+        urls_text = "\n".join(
+            f"video {index}: {url}" for index, url in indexed_urls
+        )
+        response.content.append(
+            mcp.types.TextContent(
+                type="text",
+                text=(
+                    "可用视频 URL：\n"
+                    f"{urls_text}\n"
+                    "如需发送，请使用 send_message_to_user，传入 type='video'，"
+                    "并把上面的 URL 作为 url 参数传入。不要使用 path 参数，也不要使用 file:// 路径。"
+                ),
+            )
         )
         return response

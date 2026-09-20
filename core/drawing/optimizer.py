@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from astrbot.api import logger
@@ -11,6 +12,12 @@ if TYPE_CHECKING:
     from ..schemas import SubBrainConfig
 
 _ERR_KEYWORDS = ["ServerError", "All chat models failed"]
+_IMAGE_REF_RE = re.compile(r"(?:image|图)\s*(\d+)", re.IGNORECASE)
+
+
+def extract_image_refs(text: str) -> set[int]:
+    """提取提示词中的图片编号引用，兼容 image N 与图N。"""
+    return {int(match) for match in _IMAGE_REF_RE.findall(text)}
 
 
 class SubBrainOptimizer:
@@ -59,6 +66,15 @@ class SubBrainOptimizer:
                 if not optimized_prompt:
                     logger.warning(
                         "[BIG BANANA] 副脑优化返回了空文本，将使用原始提示词"
+                    )
+                    return None
+                missing_refs = extract_image_refs(prompt) - extract_image_refs(
+                    optimized_prompt
+                )
+                if missing_refs:
+                    logger.warning(
+                        "[BIG BANANA] 副脑优化丢失了图片编号引用 "
+                        f"{sorted(missing_refs)}，将使用原始提示词"
                     )
                     return None
                 logger.info(

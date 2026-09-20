@@ -274,6 +274,38 @@ class Downloader:
         ]
         return list(await asyncio.gather(*tasks))
 
+    async def download_to_file(
+        self,
+        url: str,
+        dest: Path,
+        *,
+        use_proxy: bool = False,
+        headers: dict[str, str] | None = None,
+    ) -> bool:
+        """把远程文件流式写入本地路径，成功返回 True。"""
+        try:
+            async with self.session.get(
+                url,
+                headers=headers,
+                timeout=ClientTimeout(connect=30, total=300),
+                proxy=self.http_proxy if use_proxy else None,
+            ) as response:
+                if response.status != 200:
+                    logger.error(
+                        f"[BIG BANANA] 下载文件失败，状态码: {response.status}，URL: {url}"
+                    )
+                    return False
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                with dest.open("wb") as handle:
+                    async for chunk in response.content.iter_chunked(
+                        _DOWNLOAD_CHUNK_SIZE
+                    ):
+                        handle.write(chunk)
+            return True
+        except Exception as e:
+            logger.error(f"[BIG BANANA] 下载文件失败: {url}，错误信息：{e}")
+            return False
+
     async def _download_image(
         self,
         url: str,

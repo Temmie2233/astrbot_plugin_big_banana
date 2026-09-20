@@ -18,6 +18,7 @@ from .video_base import BaseVideoProvider
 
 _PENDING_STATUSES = {"PROCESSING", "PENDING", "SUBMITTED", "CREATED"}
 _MAX_REFERENCE_BYTES = 5 * 1024 * 1024
+_MAX_PROMPT_CHARS = 512
 
 
 class ZhipuVideosProvider(BaseVideoProvider):
@@ -52,8 +53,14 @@ class ZhipuVideosProvider(BaseVideoProvider):
 
     def _build_body(self) -> tuple[dict, str | None]:
         prompt = self.params.get("prompt", "").strip()
-        if len(prompt) > 512:
-            return {}, "CogVideoX-Flash 的提示词不能超过 512 个字符"
+        if len(prompt) > _MAX_PROMPT_CHARS:
+            clipped = prompt[:_MAX_PROMPT_CHARS]
+            if " " in clipped:
+                clipped = clipped[: clipped.rfind(" ")]
+            prompt = clipped.strip()
+            logger.warning(
+                f"[BIG BANANA] 视频提示词超过 {_MAX_PROMPT_CHARS} 字符，已截断"
+            )
 
         body: dict = {
             "model": self.provider_config.model or "cogvideox-flash",

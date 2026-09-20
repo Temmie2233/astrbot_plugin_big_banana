@@ -11,7 +11,7 @@ from astrbot.api import logger
 
 from ..schemas import GenerationResult, ImageResource, ProviderCallResult
 from .base import BaseProvider
-from .utils import dedupe_images
+from .utils import dedupe_images, extract_upstream_error_message
 
 RETRY_STATUS_CODES = (408, 500, 502, 503, 504)
 NO_RETRY_STATUS_CODES = (0, 401, 402, 403, 422, 429)
@@ -131,7 +131,7 @@ class StandardProvider(BaseProvider):
                         response_text=response_text,
                     )
                 # 解析错误原因
-                err_msg = result.get("error", {}).get("message", "未知原因")
+                err_msg = extract_upstream_error_message(result) or "未知原因"
                 logger.error(
                     f"[BIG BANANA] 图片生成失败，状态码: {resp.status}，原因: {err_msg}"
                 )
@@ -193,9 +193,8 @@ class StandardProvider(BaseProvider):
                     )
                 # 解析错误原因
                 err_msg = (
-                    json.loads(response_text)
-                    .get("error", {})
-                    .get("message", "未知原因")
+                    extract_upstream_error_message(json.loads(response_text))
+                    or "未知原因"
                 )
                 logger.error(
                     f"[BIG BANANA] 图片生成失败，状态码: {resp.status}，原因: {err_msg}"

@@ -301,16 +301,27 @@ def test_non_video_configured_preset_allows_explicit_video_preset() -> None:
     assert params["capability"] == "video_generation"
 
 
-def test_builds_video_resource_links_for_model() -> None:
+def test_surfaces_video_url_as_text_for_model() -> None:
     result = GenerationResult(
         videos=[VideoResource(url="https://example.com/video.mp4")]
     )
 
     tool_result = BigBananaVideoGenerationTool._build_model_tool_result(result)
 
-    assert len(tool_result.content) == 2
-    assert str(tool_result.content[1].uri) == "https://example.com/video.mp4"
-    assert tool_result.content[1].mimeType == "video/mp4"
+    texts = [item.text for item in tool_result.content if item.type == "text"]
+    joined = "\n".join(texts)
+    assert "https://example.com/video.mp4" in joined
+    assert "send_message_to_user" in joined
+    # ResourceLink 不被 AstrBot 的工具结果转换支持，确保不再返回
+    assert all(item.type != "resource_link" for item in tool_result.content)
+
+
+def test_reports_missing_video_url() -> None:
+    result = GenerationResult(videos=[VideoResource(url="")])
+
+    tool_result = BigBananaVideoGenerationTool._build_model_tool_result(result)
+
+    assert "没有可供发送的视频 URL" in tool_result.content[0].text
 
 
 def test_returns_video_generation_failure_as_plain_text() -> None:
