@@ -1121,6 +1121,18 @@
                 "type": "bool",
                 "default": true,
                 "hint": "参考图发送前尽可能抹除包含隐私的元数据，处理失败将会移除该参考图。"
+            },
+            "video_transcode": {
+                "description": "视频平台兼容转码",
+                "type": "bool",
+                "default": true,
+                "hint": "生成视频后用 ffmpeg 转成 H.264/yuv420p/30fps/带音轨 的 mp4，以兼容 QQ 等平台；需安装 ffmpeg。"
+            },
+            "ffmpeg_path": {
+                "description": "ffmpeg 路径",
+                "type": "string",
+                "default": "",
+                "hint": "ffmpeg 可执行文件绝对路径，例如 E:\\ffmpeg\\bin\\ffmpeg.exe。留空则在 PATH 中查找。"
             }
         }
     },
@@ -1243,6 +1255,18 @@
                 "type": "int",
                 "default": 0,
                 "hint": "控制每个群组使用画图工具的冷却时间(秒)，0为不限制。在成功发送图片后开始计算冷却。"
+            },
+            "user_cooldown": {
+                "description": "个人冷却时间",
+                "type": "int",
+                "default": 0,
+                "hint": "控制每个用户在同一群聊或私聊会话内使用画图命令或工具的冷却时间(秒)，0为不限制。与群组冷却同时生效，任一未冷却完都会拦截。"
+            },
+            "admin_skip_cooldown": {
+                "description": "管理员豁免群组冷却",
+                "type": "bool",
+                "default": true,
+                "hint": "开启后，AstrBot 全局管理员不受群组画图冷却限制，且管理员的绘图不会为群组创建或刷新冷却。"
             },
             "command_use_background_task": {
                 "description": "命令调用时使用后台任务执行绘图",

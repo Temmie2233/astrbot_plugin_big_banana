@@ -79,7 +79,10 @@ def test_submit_drawing_task_respects_session_limit() -> None:
             ),
             background_callback=SimpleNamespace(enabled=lambda: False),
             whitelist_guard=SimpleNamespace(check=lambda *a, **k: SimpleNamespace(allowed=True)),
-            cooldown_guard=SimpleNamespace(check=lambda *a, **k: SimpleNamespace(allowed=True)),
+            cooldown_guard=SimpleNamespace(
+                check=lambda *a, **k: SimpleNamespace(allowed=True),
+                mark_cooldown=lambda *a, **k: None,
+            ),
         )
 
         event1 = SimpleNamespace(

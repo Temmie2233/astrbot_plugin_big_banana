@@ -1,14 +1,14 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import astrbot.api.message_components as Comp
+from astrbot.api import logger
 
 from ..schemas import MAX_SIZE_B64_LEN, GenerationResult
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from astrbot.api.event import AstrMessageEvent
     from astrbot.core.message.components import BaseMessageComponent
 
@@ -77,14 +77,21 @@ def build_result_message_chain(
     temp_dir: Path | str | None = None,
 ) -> list[BaseMessageComponent]:
     """构造适配平台限制的媒体生成结果消息链。"""
+    result_urls = [url for url in result.urls if url is not None]
+    videos = [video for video in result.videos if video.path or video.url]
+    video_urls = [video.url for video in videos if video.url]
+    # 视频消息不带引用回复，避免部分协议端（如 NapCat/QQ）处理异常。
+    reply_mode = "none" if videos and not url_only else quote_reply_mode
     msg_chain = build_message_chain(
         event,
         components=None,
-        quote_reply_mode=quote_reply_mode,
+        quote_reply_mode=reply_mode,
         is_command=is_command,
     )
-    result_urls = [url for url in result.urls if url is not None]
-    video_urls = [video.url for video in result.videos if video.url]
+    if videos:
+        logger.info(
+            f"[BIG BANANA] 发送视频: {[video.path or video.url for video in videos]}"
+        )
 
     # 如果仅 url，这里尝试检查有无 url，无则报错
     if url_only:
@@ -95,8 +102,12 @@ def build_result_message_chain(
             msg_chain.append(Comp.Plain("❌ 生成失败：没有可用的媒体 URL"))
         return msg_chain
 
-    if video_urls:
-        msg_chain.extend(Comp.Video.fromURL(url) for url in video_urls)
+    if videos:
+        for video in videos:
+            if video.path and Path(video.path).exists():
+                msg_chain.append(Comp.Video(file=str(video.path)))
+            elif video.url:
+                msg_chain.append(Comp.Video.fromURL(video.url))
         return msg_chain
 
     images_with_bytes = [image for image in result.images if image.bytes]

@@ -643,6 +643,7 @@ function loadData() {
     document.getElementById('pref_send_text_when_no_image').checked = !!pref.send_text_when_no_image;
     document.getElementById('pref_drawing_message').value = pref.drawing_message || '🎨 在画了，请稍等一会...';
     document.getElementById('pref_group_cooldown').value = pref.group_cooldown || 0;
+    document.getElementById('pref_user_cooldown').value = pref.user_cooldown || 0;
     document.getElementById('pref_use_background_task').checked = !!pref.command_use_background_task;
     document.getElementById('pref_background_task_send_type').value = pref.background_task_send_type || 'event';
 
@@ -822,6 +823,7 @@ function saveAll() {
     send_text_when_no_image: document.getElementById('pref_send_text_when_no_image').checked,
     drawing_message: document.getElementById('pref_drawing_message').value.trim(),
     group_cooldown: parseInt(document.getElementById('pref_group_cooldown').value) || 0,
+    user_cooldown: parseInt(document.getElementById('pref_user_cooldown').value) || 0,
     command_use_background_task: document.getElementById('pref_use_background_task').checked,
     background_task_send_type: document.getElementById('pref_background_task_send_type').value
   });

@@ -9,7 +9,11 @@ from ..schemas import (
     ProviderCallResult,
 )
 from .base import BaseProvider
-from .utils import dedupe_images, extract_markdown_images
+from .utils import (
+    dedupe_images,
+    extract_markdown_images,
+    extract_upstream_error_message,
+)
 
 
 class NativeProvider(BaseProvider):
@@ -42,6 +46,9 @@ class NativeProvider(BaseProvider):
             )
         except Exception as e:
             err = f"原生提供商 {self.provider_config.name} 请求异常"
+            detail = extract_upstream_error_message(e)
+            if detail:
+                err = f"{err}：{detail}"
             logger.error(f"[BIG BANANA] {err}: {e}", exc_info=True)
             return ProviderCallResult(error_message=err)
 
@@ -70,6 +77,9 @@ class NativeProvider(BaseProvider):
 
         except Exception as e:
             err = f"原生提供商 {self.provider_config.name} 流式请求异常"
+            detail = extract_upstream_error_message(e)
+            if detail:
+                err = f"{err}：{detail}"
             logger.error(f"[BIG BANANA] {err}: {e}", exc_info=True)
             return ProviderCallResult(error_message=err)
 

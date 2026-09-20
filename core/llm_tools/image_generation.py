@@ -22,7 +22,12 @@ if TYPE_CHECKING:
 
     from ...main import BigBanana
 
-TOOL_DESCRIPTION = "Draw or edit images based on text or reference images."
+TOOL_DESCRIPTION = (
+    "Generate or edit an image for the user. Call this tool whenever the user asks you "
+    "to draw, create, or edit an image (e.g. 画/画一张/生成图片/来张图). You MUST actually "
+    "call this tool to do the work; never reply that you will generate or are generating "
+    "an image without calling this tool first in the same turn."
+)
 
 PROMPT_DESCRIPTION = (
     "The detailed description of the image to generate. If the selected preset contains "
@@ -114,6 +119,8 @@ class BigBananaImageGenerationTool(BaseMediaGenerationTool):
         if not cooldown_check.allowed:
             logger.info(cooldown_check.log_message)
             return cooldown_check.message
+        # 工具一经受理即开始计算冷却
+        plugin.cooldown_guard.mark_cooldown(event)
 
         prompt = kwargs.get("prompt", "")
         preset_name = kwargs.get("preset_name")

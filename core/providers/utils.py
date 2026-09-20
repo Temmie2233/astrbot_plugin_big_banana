@@ -1,3 +1,4 @@
+import json
 import math
 import re
 from io import BytesIO
@@ -23,6 +24,40 @@ def dedupe_images(images: list[ImageResource]) -> list[ImageResource]:
             f"[BIG BANANA] 去除重复图片，从 {len(images)} 张减少到 {len(deduped)} 张"
         )
     return deduped
+
+
+def extract_upstream_error_message(source: object) -> str | None:
+    """从异常或错误响应体中提取中转站返回的可读错误信息。
+
+    支持传入异常对象、错误响应体 dict，或原始错误字符串。中转站常见的
+    ``Upstream error: {json}`` 包装会被拆开，取出内层的 error/message。
+    """
+    message: object = source if isinstance(source, str) else None
+    body = source if isinstance(source, dict) else getattr(source, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict):
+            message = error.get("message") or message
+        elif isinstance(error, str):
+            message = error
+        elif message is None:
+            message = body.get("message")
+    if not isinstance(message, str) or not message.strip():
+        return None
+
+    message = message.strip()
+    prefix = "Upstream error:"
+    if message[: len(prefix)].lower() == prefix.lower():
+        try:
+            parsed = json.loads(message[len(prefix) :].strip())
+        except json.JSONDecodeError:
+            return message
+        if isinstance(parsed, dict):
+            for key in ("error", "message"):
+                value = parsed.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+    return message
 
 
 def extract_markdown_images(text: str) -> tuple[list[str], list[str]]:
