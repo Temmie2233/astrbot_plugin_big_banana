@@ -28,7 +28,9 @@ class ProviderDispatcher:
         logger.info(
             f"[BIG BANANA]正在生成图片，提示词: {params.get('prompt', '')[:60]}"
         )
-        last_err = None
+        first_error: str | None = None
+        empty_error: str | None = None
+        skip_error: str | None = None
         # 读取提供商顺序列表，优先使用参数传入的，没有则使用默认
         provider_names = params.get(
             "providers", self.plugin.provider_config_manager.default_providers
@@ -41,19 +43,19 @@ class ProviderDispatcher:
             # 读取提供商配置
             provider_config = await self._get_provider_config(provider_name)
             if provider_config is None:
-                last_err = f"未找到名为 {provider_name} 的模板提供商或原生聊天提供商"
-                logger.error(f"[BIG BANANA] {last_err}，已跳过")
+                skip_error = f"未找到名为 {provider_name} 的模板提供商或原生聊天提供商"
+                logger.error(f"[BIG BANANA] {skip_error}，已跳过")
                 continue
 
             if provider_config.capability != "image_generation":
-                last_err = f"提供商 {provider_config.name} 不支持图片生成"
-                logger.warning(f"[BIG BANANA] {last_err}，已跳过")
+                skip_error = f"提供商 {provider_config.name} 不支持图片生成"
+                logger.warning(f"[BIG BANANA] {skip_error}，已跳过")
                 continue
 
             # 检查提供商是否启用
             if not provider_config.enabled:
-                last_err = f"提供商 {provider_config.name} 未启用"
-                logger.info(f"[BIG BANANA] {last_err}，已跳过")
+                skip_error = f"提供商 {provider_config.name} 未启用"
+                logger.info(f"[BIG BANANA] {skip_error}，已跳过")
                 continue
 
             # Truncate image_list if it exceeds provider's max_images (skip if -1)
@@ -80,12 +82,14 @@ class ProviderDispatcher:
                     return result
                 if not self.plugin.common_config.fallback_on_empty_result:
                     return result
-                last_err = f"提供商 {provider_config.name} 未返回图片"
-                logger.warning(f"[BIG BANANA] {last_err}，继续尝试下一个提供商")
+                empty_error = f"提供商 {provider_config.name} 未返回图片"
+                logger.warning(f"[BIG BANANA] {empty_error}，继续尝试下一个提供商")
                 continue
-            last_err = result.error_message
+            if first_error is None:
+                # 保留首个真实请求错误，避免被后续"未返回图片"类兜底信息覆盖
+                first_error = result.error_message
 
-        return GenerationResult(error_message=last_err)
+        return GenerationResult(error_message=first_error or empty_error or skip_error)
 
     async def _dispatch_provider(
         self,

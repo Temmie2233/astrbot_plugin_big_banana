@@ -9,6 +9,7 @@ from astrbot.api import logger
 from astrbot.core.agent.tool import FunctionTool
 from astrbot.core.astr_agent_context import AstrAgentContext
 
+from ..prompt_params_help import build_prompt_params_help
 from ..schemas import PARAMS_LIST
 
 if TYPE_CHECKING:
@@ -19,8 +20,10 @@ if TYPE_CHECKING:
     from ...main import BigBanana
 
 PROMPT_TOOL_DESCRIPTION = (
-    "Retrieve preset names, full prompts, and parameters for Big Banana. "
-    "Call this tool if the user specifies a preset to get its full details before generating images."
+    "Retrieve preset names, full prompts, and the supported generation parameter "
+    "list for Big Banana. Call this tool if the user specifies a preset to get its "
+    "full details before generating images, or if the user asks which prompt "
+    "parameters (e.g. --min_images, --aspect_ratio) are supported."
 )
 
 PROMPT_TOOL_PRESET_DESCRIPTION = (
@@ -29,6 +32,11 @@ PROMPT_TOOL_PRESET_DESCRIPTION = (
 
 PROMPT_TOOL_LIST_DESCRIPTION = (
     "Set to true to list all available preset names."
+)
+
+PROMPT_TOOL_PARAM_LIST_DESCRIPTION = (
+    "Set to true to list all supported generation parameters, their accepted "
+    "values, and descriptions."
 )
 
 
@@ -48,6 +56,10 @@ def build_prompt_tool_parameters() -> dict:
             "get_preset_name_list": {
                 "type": "boolean",
                 "description": PROMPT_TOOL_LIST_DESCRIPTION,
+            },
+            "get_param_list": {
+                "type": "boolean",
+                "description": PROMPT_TOOL_PARAM_LIST_DESCRIPTION,
             },
         },
         "required": [],
@@ -108,6 +120,7 @@ class BigBananaPromptTool(FunctionTool[AstrAgentContext]):
         """
         get_preset_name_list = kwargs.get("get_preset_name_list", False)
         get_preset_prompt = kwargs.get("get_preset_prompt", "")
+        get_param_list = kwargs.get("get_param_list", False)
 
         if not isinstance(get_preset_name_list, bool):
             logger.warning(
@@ -121,9 +134,19 @@ class BigBananaPromptTool(FunctionTool[AstrAgentContext]):
                 f"{type(get_preset_prompt).__name__}"
             )
             return "get_preset_prompt 必须是 string 类型，请提供有效的预设名称。"
+        if not isinstance(get_param_list, bool):
+            logger.warning(
+                "[BIG BANANA] get_param_list 参数类型无效："
+                f"{type(get_param_list).__name__}"
+            )
+            return "get_param_list 必须是 boolean 类型，请使用 true 或 false。"
 
         get_preset_prompt = get_preset_prompt.strip()
         prompt_config = plugin.prompt_config_manager.prompt_config
+
+        if get_param_list:
+            logger.info("[BIG BANANA] 返回提示词参数列表")
+            return build_prompt_params_help()
 
         if get_preset_name_list:
             preset_name_list = list(prompt_config.keys())

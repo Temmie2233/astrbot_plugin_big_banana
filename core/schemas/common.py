@@ -114,4 +114,16 @@ class LlmToolsConfig:
     """ 后台任务完成回调方法 """
     llm_tool_max_tasks_per_session: int = 1
     """ 每个会话 LLM 工具后台任务并发上限（0 为不限制） """
+    tool_call_reminder: bool = True
+    """ 是否给每次 LLM 请求追加工具调用硬约束提醒 """
+    fake_call_retry_enabled: bool = True
+    """ 检测到“只口播不调用”的绘图回复时强制重试 """
+    fake_call_retry_max: int = 1
+    """ 伪工具调用最大强制重试次数 """
+    fake_call_retry_use_provider: bool = True
+    """ 强制重试那一轮是否切换到指定提供商 """
+    fake_call_retry_provider: str = ""
+    """ 强制重试时使用的提供商 ID（留空沿用当前提供商） """
+    fake_call_fallback_generate: bool = True
+    """ 重试仍失败时直接用提取的提示词兜底生成图片 """
 

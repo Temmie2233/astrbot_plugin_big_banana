@@ -24,16 +24,22 @@ if TYPE_CHECKING:
 
 TOOL_DESCRIPTION = (
     "Generate or edit an image for the user. Call this tool whenever the user asks you "
-    "to draw, create, or edit an image (e.g. 画/画一张/生成图片/来张图). You MUST actually "
-    "call this tool to do the work; never reply that you will generate or are generating "
-    "an image without calling this tool first in the same turn."
+    "to draw, create, or edit an image (e.g. 画/画一张/生成图片/来张图/画人设图/自画像/头像). "
+    "【硬性要求｜必须遵守】只要用户提出画图、生成图片、画人设图/自画像/头像等任何图像需求，"
+    "你必须在同一轮回复中立即调用本工具，并在 prompt 参数中写入画面描述；"
+    "严禁在未调用本工具的情况下回复“好的/在画了/这就去画/正在生成/请稍等/马上就好”等任何"
+    "声称要画或正在画的台词，也不要用台词表演调用过程；"
+    "只有本工具真正被调用之后，才可以用角色语气表示正在生成。"
+    "You MUST actually call this tool in the same turn; never reply that you will "
+    "generate or are generating an image without calling this tool first."
 )
 
 PROMPT_DESCRIPTION = (
     "The detailed description of the image to generate. If the selected preset contains "
     "a placeholder, this prompt changes only the placeholder's content; the rest of the "
     "preset remains unchanged. If reference images are used, refer to them in the "
-    "prompt by their 1-based index (e.g., 'image 1', 'image 2')."
+    "prompt by their 1-based index (e.g., 'image 1', 'image 2'). "
+    "请用中文详细描述要生成的画面（主体与外观、动作、场景、风格、构图、光线），越具体越好。"
 )
 
 PRESET_DESCRIPTION = (

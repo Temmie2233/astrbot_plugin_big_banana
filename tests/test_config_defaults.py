@@ -28,6 +28,14 @@ def test_llm_tool_presets_allow_empty_to_disable_and_have_recommended_defaults()
     assert llm_tool_items["llm_tool_max_tasks_per_session"]["default"] == 1
 
 
+def test_tool_call_reminder_is_enabled_by_default() -> None:
+    schema = json.loads((ROOT / "_conf_schema.json").read_text(encoding="utf-8"))
+    llm_tool_items = schema["llm_tools"]["items"]
+
+    assert LlmToolsConfig().tool_call_reminder is True
+    assert llm_tool_items["tool_call_reminder"]["default"] is True
+
+
 def test_empty_results_do_not_fall_back_by_default() -> None:
     assert CommonConfig().fallback_on_empty_result is False
 

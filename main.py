@@ -1,7 +1,9 @@
 import json
 
+import astrbot.api.message_components as Comp
 from astrbot.api import logger
 from astrbot.api.event import AstrMessageEvent, filter
+from astrbot.api.provider import ProviderRequest
 from astrbot.api.star import Context, Star, StarTools
 from astrbot.core import AstrBotConfig
 
@@ -28,7 +30,9 @@ from .core.llm_tools import (
     BigBananaImageGenerationTool,
     BigBananaPromptTool,
     BigBananaVideoGenerationTool,
+    FakeCallRetryGuard,
 )
+from .core.prompt_params_help import build_prompt_params_help
 from .core.schemas import (
     CommonConfig,
     ImageHostingConfig,
@@ -82,6 +86,8 @@ class BigBanana(Star):
         self.sub_brain_config = SubBrainConfig(**self.conf.get("sub_brain", {}))
         self.save_images = SaveImagesConfig(**self.conf.get("save_images", {}))
         self.llm_tools_config = LlmToolsConfig(**self.conf.get("llm_tools", {}))
+        # 伪工具调用重试守卫（仅保存插件引用，运行期数据在调用时读取）
+        self.fake_call_retry_guard = FakeCallRetryGuard(self)
 
     async def initialize(self):
         """根据已读取的配置创建运行期依赖和单例对象"""
@@ -239,6 +245,22 @@ class BigBanana(Star):
             return
         yield event.plain_result(f"✅ 已更新你的人设额外描述：{description}")
 
+    @filter.command("lm参数", alias={"lmhelp", "lm帮助", "绘图参数"})
+    async def prompt_params_help(self, event: AstrMessageEvent):
+        """lm参数 查看支持的提示词参数列表"""
+        event.stop_event()
+        text = build_prompt_params_help()
+        # aiocqhttp 下用合并转发发送，避免长消息刷屏
+        if event.get_platform_name() == "aiocqhttp":
+            node = Comp.Node(
+                uin=event.get_self_id(),
+                name="大香蕉",
+                content=[Comp.Plain(text)],
+            )
+            yield event.chain_result([node])
+            return
+        yield event.plain_result(text)
+
     @filter.permission_type(filter.PermissionType.ADMIN, raise_error=False)
     @filter.command("lm白名单添加", alias={"lmawl"})
     async def add_whitelist_command(
@@ -295,6 +317,55 @@ class BigBanana(Star):
         """lm删除 触发词"""
         async for res in self.prompt_handler.del_prompt(event, trigger_word):
             yield res
+
+    @filter.on_llm_request()
+    async def inject_drawing_tool_reminder(
+        self, event: AstrMessageEvent, req: ProviderRequest
+    ) -> None:
+        """给每次 LLM 请求追加绘图/视频工具调用约束，减少只演戏不调用工具的情况。"""
+        if not self.llm_tools_config.tool_call_reminder:
+            return
+        reminder = self._build_drawing_tool_reminder()
+        if not reminder:
+            return
+        if req.system_prompt:
+            req.system_prompt = f"{req.system_prompt}\n\n{reminder}"
+        else:
+            req.system_prompt = reminder
+
+    @filter.on_using_llm_tool()
+    async def mark_llm_tool_called(
+        self, event: AstrMessageEvent, tool, tool_args=None
+    ) -> None:
+        """记录真实发生过的香蕉生成工具调用，供伪调用重试守卫判断。"""
+        if str(getattr(tool, "name", "")) in (
+            "banana_image_generation",
+            "banana_video_generation",
+        ):
+            self.fake_call_retry_guard.mark_tool_called(event)
+
+    @filter.on_decorating_result()
+    async def guard_fake_tool_call(self, event: AstrMessageEvent) -> None:
+        """发送前检测“只口播不调用”的绘图回复并强制重试。"""
+        await self.fake_call_retry_guard.handle_decorating_result(event)
+
+    def _build_drawing_tool_reminder(self) -> str:
+        """构造绘图/视频工具调用硬约束文本，未启用对应工具时返回空串。"""
+        tools: list[str] = []
+        if self.llm_tools_config.enable_image_generation_tool:
+            tools.append("banana_image_generation（图片）")
+        if self.llm_tools_config.enable_video_generation_tool:
+            tools.append("banana_video_generation（视频）")
+        if not tools:
+            return ""
+        tool_names = "、".join(tools)
+        return (
+            "【工具调用硬性约束】当用户要求画图、生成图片、画人设图/自画像/头像或生成视频时，"
+            f"必须立即在同一轮调用工具 {tool_names}，并在参数中写明创作需求；"
+            "在工具被真正调用之前，禁止回复“好的/在画了/这就去画/正在生成/请稍等/马上就好”"
+            "等任何声称要画或正在画的台词，也不要用台词表演调用过程；"
+            "只有工具被真正调用之后，才可以表示正在生成；工具失败时如实说明失败原因。"
+        )
 
     @filter.event_message_type(filter.EventMessageType.ALL, priority=5)
     async def on_message(self, event: AstrMessageEvent):

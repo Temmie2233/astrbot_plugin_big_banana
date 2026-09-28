@@ -1578,6 +1578,47 @@
                 "type": "int",
                 "default": 1,
                 "hint": "每个会话独立计算的 LLM 工具绘图/视频生成后台任务并发上限。设为 1 可防止同一会话后台任务无限堆积（设为 0 表示不限制）。"
+            },
+            "tool_call_reminder": {
+                "description": "工具调用硬约束提醒",
+                "type": "bool",
+                "default": true,
+                "hint": "启用后，每次 LLM 请求都会自动追加一条硬约束：用户要求画图/画人设图/生成图片或视频时，必须立即调用对应工具，不得只回复“在画了/正在生成”等台词或表演调用过程。"
+            },
+            "fake_call_retry_enabled": {
+                "description": "伪调用强制重试",
+                "type": "bool",
+                "default": true,
+                "hint": "启用后，如果模型只用文字表演调用 banana_image_generation 却没有真正调用工具，插件会拦下这条回复并强制重试一次。"
+            },
+            "fake_call_retry_max": {
+                "description": "伪调用最大重试次数",
+                "type": "int",
+                "default": 1,
+                "hint": "每条消息最多强制重试几次，防止模型反复伪调用导致死循环。"
+            },
+            "fake_call_retry_use_provider": {
+                "description": "重试轮切换提供商",
+                "type": "bool",
+                "default": true,
+                "hint": "开启后，强制重试那一轮会临时使用下面选择的提供商（只影响重试轮，不改会话默认模型）；关闭则始终沿用当前提供商。"
+            },
+            "fake_call_retry_provider": {
+                "description": "重试轮使用的提供商",
+                "type": "string",
+                "_special": "select_provider",
+                "default": "",
+                "collapsed": true,
+                "condition": {
+                    "fake_call_retry_use_provider": true
+                },
+                "hint": "只对强制重试那一轮生效的对话提供商。留空则沿用当前提供商；推荐选择工具调用更稳的模型。"
+            },
+            "fake_call_fallback_generate": {
+                "description": "重试失败后兜底生成",
+                "type": "bool",
+                "default": true,
+                "hint": "强制重试仍然没有调用工具时，直接用回复中提取的提示词走命令管线生成图片，保证有图。"
             }
         }
     },
