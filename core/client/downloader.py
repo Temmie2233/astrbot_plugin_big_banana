@@ -274,38 +274,6 @@ class Downloader:
         ]
         return list(await asyncio.gather(*tasks))
 
-    async def download_to_file(
-        self,
-        url: str,
-        dest: Path,
-        *,
-        use_proxy: bool = False,
-        headers: dict[str, str] | None = None,
-    ) -> bool:
-        """把远程文件流式写入本地路径，成功返回 True。"""
-        try:
-            async with self.session.get(
-                url,
-                headers=headers,
-                timeout=ClientTimeout(connect=30, total=300),
-                proxy=self.http_proxy if use_proxy else None,
-            ) as response:
-                if response.status != 200:
-                    logger.error(
-                        f"[BIG BANANA] 下载文件失败，状态码: {response.status}，URL: {url}"
-                    )
-                    return False
-                dest.parent.mkdir(parents=True, exist_ok=True)
-                with dest.open("wb") as handle:
-                    async for chunk in response.content.iter_chunked(
-                        _DOWNLOAD_CHUNK_SIZE
-                    ):
-                        handle.write(chunk)
-            return True
-        except Exception as e:
-            logger.error(f"[BIG BANANA] 下载文件失败: {url}，错误信息：{e}")
-            return False
-
     async def _download_image(
         self,
         url: str,
@@ -432,16 +400,18 @@ class Downloader:
 
 
 async def is_public_http_url(url: str) -> bool:
-    """Check whether an HTTP URL resolves exclusively to public addresses.
+    """Check whether an HTTP media URL resolves exclusively to public addresses.
 
     Args:
-        url: Remote image URL to validate.
+        url: Remote media URL to validate.
 
     Returns:
         True when the URL uses HTTP(S) and all resolved addresses are public.
     """
+    hostname = "unknown"
     try:
         parsed = urllib.parse.urlparse(url)
+        hostname = parsed.hostname or "unknown"
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             return False
         port = parsed.port or (443 if parsed.scheme == "https" else 80)
@@ -460,7 +430,9 @@ async def is_public_http_url(url: str) -> bool:
             ipaddress.ip_address(address).is_global for address in addresses
         )
     except (OSError, ValueError) as e:
-        logger.warning(f"[BIG BANANA] 校验公网图片地址失败: {url}，错误信息：{e}")
+        logger.warning(
+            f"[BIG BANANA] Failed to validate public media host {hostname}: {e}"
+        )
         return False
 
 

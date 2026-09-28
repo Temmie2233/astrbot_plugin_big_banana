@@ -17,6 +17,8 @@ class CommonConfig:
     """请求超时时间, 单位: 秒"""
     proxy: str | None = None
     """代理"""
+    allow_private_provider_urls: bool = False
+    """Whether provider-returned media URLs may resolve to private addresses."""
     strip_metadata: bool = True
     """是否在图片处理中抹除所有可能带隐私的元数据"""
     video_transcode: bool = True
@@ -59,7 +61,6 @@ class PreferenceConfig:
     """ 收集模式超时时间, 单位: 秒 """
     quote_reply_mode: str = "both"
     """ 回复引用配置。both: 命令和LLM工具均引用回复；command_only: 仅命令引用回复；tool_only: 仅LLM工具引用回复；none: 不引用回复 """
-
 
 
 @dataclass(repr=False, slots=True)
@@ -126,4 +127,3 @@ class LlmToolsConfig:
     """ 强制重试时使用的提供商 ID（留空沿用当前提供商） """
     fake_call_fallback_generate: bool = True
     """ 重试仍失败时直接用提取的提示词兜底生成图片 """
-

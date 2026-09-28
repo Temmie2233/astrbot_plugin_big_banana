@@ -14,6 +14,7 @@ from ...drawing import (
 from ...drawing.collector import ImageCollector
 from ...schemas import GenerationResult
 from ...utils import build_message_chain, build_result_message_chain
+from ...video import prepare_video_delivery
 from .gather_session import DrawingGatherSession
 
 if TYPE_CHECKING:
@@ -240,6 +241,20 @@ class DrawingCommandHandler:
                         image_list=collector.images,
                     )
 
+            is_video = (
+                params.get("capability", "image_generation") == "video_generation"
+            )
+            url_only = params.get("url", self.plugin.params_config.url)
+            if not result.error_message:
+                if is_video:
+                    delivery_error = await prepare_video_delivery(
+                        self.plugin,
+                        result,
+                        url_only=url_only,
+                    )
+                    if delivery_error:
+                        result.error_message = delivery_error
+
             # 构建消息链
             if result.error_message:
                 media_name = (
@@ -259,7 +274,7 @@ class DrawingCommandHandler:
                 msg_chain = build_result_message_chain(
                     event,
                     result=result,
-                    url_only=params.get("url", self.plugin.params_config.url),
+                    url_only=url_only,
                     quote_reply_mode=self.plugin.preference_config.quote_reply_mode,
                     is_command=True,
                     temporary_paths=temporary_paths,
