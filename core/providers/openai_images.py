@@ -67,35 +67,39 @@ class OpenAIImagesProvider(StandardProvider):
                 "output_format", self.plugin.params_config.output_format
             )
             is_gif = str(output_format or "").strip().lower() == "gif"
-            if not is_gif:
-                quality = self.params.get(
-                    "quality", self.plugin.params_config.quality
-                )
-                if quality not in (None, "", "default"):
-                    data["quality"] = quality
-                background = self.params.get(
-                    "background", self.plugin.params_config.background
-                )
-                if background not in (None, "", "default"):
-                    data["background"] = background
-            if output_format not in (None, "", "default"):
+            is_catbee = (
+                "catbee" in self.provider_config.name.lower()
+                or "catbee.online"
+                in str(self.provider_config.base_url or "").lower()
+            )
+            quality = self.params.get("quality", self.plugin.params_config.quality)
+            if quality not in (None, "", "default"):
+                data["quality"] = quality
+            background = self.params.get(
+                "background", self.plugin.params_config.background
+            )
+            if background not in (None, "", "default"):
+                data["background"] = background
+            if output_format not in (None, "", "default") and not (
+                is_gif and is_catbee
+            ):
                 data["output_format"] = output_format
-            if not is_gif:
-                output_compression = self.params.get(
-                    "output_compression", self.plugin.params_config.output_compression
+            output_compression = self.params.get(
+                "output_compression", self.plugin.params_config.output_compression
+            )
+            if output_compression not in (None, "", -1):
+                data["output_compression"] = output_compression
+            if self.image_list:
+                input_fidelity = self.params.get(
+                    "input_fidelity", self.plugin.params_config.input_fidelity
                 )
-                if output_compression not in (None, "", -1):
-                    data["output_compression"] = output_compression
-                if self.image_list:
-                    input_fidelity = self.params.get(
-                        "input_fidelity", self.plugin.params_config.input_fidelity
-                    )
-                    if input_fidelity not in (None, "", "default"):
-                        data["input_fidelity"] = input_fidelity
-                data["moderation"] = self.params.get(
-                    "moderation", self.plugin.params_config.moderation
-                )
-            self._add_gif_params(data)
+                if input_fidelity not in (None, "", "default"):
+                    data["input_fidelity"] = input_fidelity
+            data["moderation"] = self.params.get(
+                "moderation", self.plugin.params_config.moderation
+            )
+            if is_gif and not is_catbee:
+                self._add_gif_params(data)
         if self.provider_config.stream:
             data["stream"] = "true"
             data["partial_images"] = self.params.get(
@@ -150,29 +154,33 @@ class OpenAIImagesProvider(StandardProvider):
                 "output_format", self.plugin.params_config.output_format
             )
             is_gif = str(output_format or "").strip().lower() == "gif"
-            if not is_gif:
-                quality = self.params.get(
-                    "quality", self.plugin.params_config.quality
-                )
-                if quality not in (None, "", "default"):
-                    context["quality"] = quality
-                background = self.params.get(
-                    "background", self.plugin.params_config.background
-                )
-                if background not in (None, "", "default"):
-                    context["background"] = background
-            if output_format not in (None, "", "default"):
+            is_catbee = (
+                "catbee" in self.provider_config.name.lower()
+                or "catbee.online"
+                in str(self.provider_config.base_url or "").lower()
+            )
+            quality = self.params.get("quality", self.plugin.params_config.quality)
+            if quality not in (None, "", "default"):
+                context["quality"] = quality
+            background = self.params.get(
+                "background", self.plugin.params_config.background
+            )
+            if background not in (None, "", "default"):
+                context["background"] = background
+            if output_format not in (None, "", "default") and not (
+                is_gif and is_catbee
+            ):
                 context["output_format"] = output_format
-            if not is_gif:
-                output_compression = self.params.get(
-                    "output_compression", self.plugin.params_config.output_compression
-                )
-                if output_compression not in (None, "", -1):
-                    context["output_compression"] = output_compression
-                context["moderation"] = self.params.get(
-                    "moderation", self.plugin.params_config.moderation
-                )
-            self._add_gif_params(context)
+            output_compression = self.params.get(
+                "output_compression", self.plugin.params_config.output_compression
+            )
+            if output_compression not in (None, "", -1):
+                context["output_compression"] = output_compression
+            context["moderation"] = self.params.get(
+                "moderation", self.plugin.params_config.moderation
+            )
+            if is_gif and not is_catbee:
+                self._add_gif_params(context)
         # 此参数仅支持dall-e-2 / dall-e-3
         if self.provider_config.model.startswith(("dall-e-2", "dall-e-3")):
             context["response_format"] = "b64_json"
