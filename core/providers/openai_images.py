@@ -2,6 +2,8 @@ import json
 
 from aiohttp import FormData
 
+from astrbot.api import logger
+
 from .standard import StandardProvider
 from .utils import get_openai_size
 
@@ -18,6 +20,35 @@ class OpenAIImagesProvider(StandardProvider):
             headers["Content-Type"] = "application/json"
         return headers
 
+    def _add_gif_params(self, body: dict) -> None:
+        """GIF 输出时固定 size，并在 edits 路径补 frame_count/frame_duration_ms。"""
+        output_format = self.params.get(
+            "output_format", self.plugin.params_config.output_format
+        )
+        if str(output_format or "").strip().lower() != "gif":
+            return
+
+        body["size"] = "1024x1024"
+        # catbee 的 generations 接口不接受 GIF 帧参数；仅 edits 支持。
+        if not self.image_list:
+            return
+
+        frame_count = self.params.get(
+            "frame_count",
+            getattr(self.plugin.params_config, "frame_count", 9),
+        )
+        frame_duration_ms = self.params.get(
+            "frame_duration_ms",
+            getattr(self.plugin.params_config, "frame_duration_ms", 200),
+        )
+        try:
+            if frame_count not in (None, "", 0):
+                body["frame_count"] = int(frame_count)
+            if frame_duration_ms not in (None, "", 0):
+                body["frame_duration_ms"] = int(frame_duration_ms)
+        except (TypeError, ValueError):
+            pass
+
     def _build_edit_body(self) -> FormData:
         """构建 Images edits multipart 请求体。"""
         # multipart 的 FormData，发送时可能被 aiohttp 消费掉，所以每次都重新构建
@@ -32,38 +63,50 @@ class OpenAIImagesProvider(StandardProvider):
             ),
         }
         if self.provider_config.model.startswith(("gpt-image", "chatgpt-image")):
-            quality = self.params.get("quality", self.plugin.params_config.quality)
-            if quality not in (None, "", "default"):
-                data["quality"] = quality
-            background = self.params.get(
-                "background", self.plugin.params_config.background
-            )
-            if background not in (None, "", "default"):
-                data["background"] = background
             output_format = self.params.get(
                 "output_format", self.plugin.params_config.output_format
             )
+            is_gif = str(output_format or "").strip().lower() == "gif"
+            if not is_gif:
+                quality = self.params.get(
+                    "quality", self.plugin.params_config.quality
+                )
+                if quality not in (None, "", "default"):
+                    data["quality"] = quality
+                background = self.params.get(
+                    "background", self.plugin.params_config.background
+                )
+                if background not in (None, "", "default"):
+                    data["background"] = background
             if output_format not in (None, "", "default"):
                 data["output_format"] = output_format
-            output_compression = self.params.get(
-                "output_compression", self.plugin.params_config.output_compression
-            )
-            if output_compression not in (None, "", -1):
-                data["output_compression"] = output_compression
-            if self.image_list:
-                input_fidelity = self.params.get(
-                    "input_fidelity", self.plugin.params_config.input_fidelity
+            if not is_gif:
+                output_compression = self.params.get(
+                    "output_compression", self.plugin.params_config.output_compression
                 )
-                if input_fidelity not in (None, "", "default"):
-                    data["input_fidelity"] = input_fidelity
-            data["moderation"] = self.params.get(
-                "moderation", self.plugin.params_config.moderation
-            )
+                if output_compression not in (None, "", -1):
+                    data["output_compression"] = output_compression
+                if self.image_list:
+                    input_fidelity = self.params.get(
+                        "input_fidelity", self.plugin.params_config.input_fidelity
+                    )
+                    if input_fidelity not in (None, "", "default"):
+                        data["input_fidelity"] = input_fidelity
+                data["moderation"] = self.params.get(
+                    "moderation", self.plugin.params_config.moderation
+                )
+            self._add_gif_params(data)
         if self.provider_config.stream:
             data["stream"] = "true"
             data["partial_images"] = self.params.get(
                 "partial_images", self.plugin.params_config.partial_images
             )
+
+        logger.info(
+            "[BIG BANANA] Images edits fields=%s images=%d",
+            sorted(data.keys()),
+            len(self.image_list),
+        )
 
         multipart = FormData()
         for key, val in data.items():
@@ -103,27 +146,33 @@ class OpenAIImagesProvider(StandardProvider):
             ),
         }
         if self.provider_config.model.startswith(("gpt-image", "chatgpt-image")):
-            quality = self.params.get("quality", self.plugin.params_config.quality)
-            if quality not in (None, "", "default"):
-                context["quality"] = quality
-            background = self.params.get(
-                "background", self.plugin.params_config.background
-            )
-            if background not in (None, "", "default"):
-                context["background"] = background
             output_format = self.params.get(
                 "output_format", self.plugin.params_config.output_format
             )
+            is_gif = str(output_format or "").strip().lower() == "gif"
+            if not is_gif:
+                quality = self.params.get(
+                    "quality", self.plugin.params_config.quality
+                )
+                if quality not in (None, "", "default"):
+                    context["quality"] = quality
+                background = self.params.get(
+                    "background", self.plugin.params_config.background
+                )
+                if background not in (None, "", "default"):
+                    context["background"] = background
             if output_format not in (None, "", "default"):
                 context["output_format"] = output_format
-            output_compression = self.params.get(
-                "output_compression", self.plugin.params_config.output_compression
-            )
-            if output_compression not in (None, "", -1):
-                context["output_compression"] = output_compression
-            context["moderation"] = self.params.get(
-                "moderation", self.plugin.params_config.moderation
-            )
+            if not is_gif:
+                output_compression = self.params.get(
+                    "output_compression", self.plugin.params_config.output_compression
+                )
+                if output_compression not in (None, "", -1):
+                    context["output_compression"] = output_compression
+                context["moderation"] = self.params.get(
+                    "moderation", self.plugin.params_config.moderation
+                )
+            self._add_gif_params(context)
         # 此参数仅支持dall-e-2 / dall-e-3
         if self.provider_config.model.startswith(("dall-e-2", "dall-e-3")):
             context["response_format"] = "b64_json"
@@ -132,6 +181,12 @@ class OpenAIImagesProvider(StandardProvider):
             context["partial_images"] = self.params.get(
                 "partial_images", self.plugin.params_config.partial_images
             )
+
+        logger.info(
+            "[BIG BANANA] Images generations fields=%s images=%d",
+            sorted(context.keys()),
+            len(self.image_list),
+        )
 
         self._body_context_cache = context
         return context

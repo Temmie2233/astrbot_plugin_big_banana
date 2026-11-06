@@ -59,6 +59,12 @@ class ParamsConfig:
     """OpenAI 图片背景类型；default 表示不传递。"""
     output_format: str = "default"
     """OpenAI 图片输出格式；default 表示不传递。"""
+    frame_count: int = 9
+    """GIF 帧数；仅在 output_format=gif 时传递。"""
+    frame_duration_ms: int = 200
+    """GIF 每帧毫秒；仅在 output_format=gif 时传递。"""
+    complexity: str = "default"
+    """GIF 渲染复杂度；default 表示不传递，可选 low/medium/high。"""
     output_compression: int | None = None
     """OpenAI JPEG/WebP 输出压缩程度；None 或负数表示不传递。"""
     input_fidelity: str = "default"
@@ -95,6 +101,9 @@ class ParamsConfig:
         quality: str = "default",
         background: str = "default",
         output_format: str = "default",
+        frame_count: int = 9,
+        frame_duration_ms: int = 200,
+        complexity: str = "default",
         output_compression: int | None = None,
         input_fidelity: str = "default",
         action: str = "default",
@@ -126,6 +135,9 @@ class ParamsConfig:
         self.quality = quality
         self.background = background
         self.output_format = output_format
+        self.frame_count = frame_count
+        self.frame_duration_ms = frame_duration_ms
+        self.complexity = complexity
         self.output_compression = output_compression
         self.input_fidelity = input_fidelity
         self.action = action

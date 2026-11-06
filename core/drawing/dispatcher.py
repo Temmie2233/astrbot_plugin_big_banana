@@ -71,6 +71,13 @@ class ProviderDispatcher:
                 )
                 provider_image_list = image_list[: provider_config.max_images]
 
+            logger.info(
+                "[BIG BANANA] 使用绘图提供商: %s (%s, model=%s)",
+                provider_config.name,
+                provider_config.provider_type,
+                provider_config.model,
+            )
+
             # 使用统一 provider 注册表分发
             result = await self._dispatch_provider(
                 provider_config,

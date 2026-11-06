@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 import mcp
@@ -31,7 +32,11 @@ TOOL_DESCRIPTION = (
     "声称要画或正在画的台词，也不要用台词表演调用过程；"
     "只有本工具真正被调用之后，才可以用角色语气表示正在生成。"
     "You MUST actually call this tool in the same turn; never reply that you will "
-    "generate or are generating an image without calling this tool first."
+    "generate or are generating an image without calling this tool first. "
+    "If the user explicitly asks for an animated GIF/动图/循环动画, set output_format "
+    "to \"gif\"; both text-only generation and reference-image edits support GIF. "
+    "Optionally set frame_count (2-16), frame_duration_ms (20-2000), and complexity "
+    "(low/medium/high). Otherwise leave output_format unset."
 )
 
 PROMPT_DESCRIPTION = (
@@ -52,6 +57,27 @@ REFERENCES_DESCRIPTION = (
     "user IDs prefixed with '@' (e.g., '@123456', '@username') for avatar references. "
     "Do not use base64 or data URLs. Reuse existing paths/URLs from the conversation "
     "history if available."
+)
+
+OUTPUT_FORMAT_DESCRIPTION = (
+    "Output format. Leave unset for a normal still image. Set 'gif' only when the "
+    "user explicitly asks for an animated GIF/动图; png/jpeg/webp can override the "
+    "provider default. GIF also accepts frame_count, frame_duration_ms and complexity."
+)
+
+FRAME_COUNT_DESCRIPTION = (
+    "Optional GIF frame count, 2-16. Only used when output_format is gif; "
+    "default 9."
+)
+
+FRAME_DURATION_DESCRIPTION = (
+    "Optional GIF frame duration in milliseconds, 20-2000, preferably in 10ms "
+    "steps. Only used when output_format is gif; default 200."
+)
+
+COMPLEXITY_DESCRIPTION = (
+    "Optional GIF rendering complexity: low/medium/high. Only used when "
+    "output_format is gif; default medium."
 )
 
 
@@ -81,6 +107,28 @@ def build_parameters() -> dict:
                     ]
                 },
                 "description": REFERENCES_DESCRIPTION,
+            },
+            "output_format": {
+                "type": "string",
+                "enum": ["default", "png", "jpeg", "webp", "gif"],
+                "description": OUTPUT_FORMAT_DESCRIPTION,
+            },
+            "frame_count": {
+                "type": "integer",
+                "minimum": 2,
+                "maximum": 16,
+                "description": FRAME_COUNT_DESCRIPTION,
+            },
+            "frame_duration_ms": {
+                "type": "integer",
+                "minimum": 20,
+                "maximum": 2000,
+                "description": FRAME_DURATION_DESCRIPTION,
+            },
+            "complexity": {
+                "type": "string",
+                "enum": ["low", "medium", "high"],
+                "description": COMPLEXITY_DESCRIPTION,
             },
         },
         "required": [],
@@ -168,6 +216,46 @@ class BigBananaImageGenerationTool(BaseMediaGenerationTool):
                 "请使用聊天记录中已有的本地 Path 图片，或使用 @用户 (或数字 ID) 引用头像。"
             )
 
+        output_format = kwargs.get("output_format")
+        if output_format is None:
+            output_format = ""
+        if not isinstance(output_format, str):
+            logger.warning("[BIG BANANA] 绘图工具的 output_format 参数类型无效")
+            return "output_format 必须是字符串。"
+        output_format = output_format.strip().lower()
+        if output_format and output_format not in {
+            "default",
+            "png",
+            "jpeg",
+            "webp",
+            "gif",
+        }:
+            logger.warning(f"[BIG BANANA] 不支持的 output_format: {output_format}")
+            return "output_format 只能是 default/png/jpeg/webp/gif。"
+
+        frame_count, frame_count_error = self._parse_optional_int(
+            kwargs.get("frame_count"), "frame_count", 2, 16
+        )
+        if frame_count_error:
+            return frame_count_error
+        frame_duration_ms, frame_duration_error = self._parse_optional_int(
+            kwargs.get("frame_duration_ms"),
+            "frame_duration_ms",
+            20,
+            2000,
+        )
+        if frame_duration_error:
+            return frame_duration_error
+
+        complexity = kwargs.get("complexity")
+        if complexity is None:
+            complexity = ""
+        if not isinstance(complexity, str):
+            return "complexity 必须是字符串。"
+        complexity = complexity.strip().lower()
+        if complexity and complexity not in {"low", "medium", "high"}:
+            return "complexity 只能是 low/medium/high。"
+
         prompt = prompt.strip()
         preset_name = preset_name.strip() if preset_name else None
         image_references = [str(reference).strip() for reference in image_references]
@@ -196,6 +284,17 @@ class BigBananaImageGenerationTool(BaseMediaGenerationTool):
             return (
                 "banana_image_generation 只支持图片预设，请通过视频生成命令执行该预设。"
             )
+
+        if output_format:
+            params["output_format"] = output_format
+        if frame_count is not None:
+            params["frame_count"] = frame_count
+        if frame_duration_ms is not None:
+            params["frame_duration_ms"] = frame_duration_ms
+        if complexity:
+            params["complexity"] = complexity
+        if str(params.get("output_format") or "").lower() == "gif":
+            self._ensure_gif_params(params)
 
         logger.info(f"[BIG BANANA] 生成图片提示词: {params.get('prompt', '')[:128]}")
         result = await self._submit_drawing_task(
@@ -257,6 +356,55 @@ class BigBananaImageGenerationTool(BaseMediaGenerationTool):
 
         return params, None
 
+    @staticmethod
+    def _parse_optional_int(
+        value: Any,
+        name: str,
+        minimum: int,
+        maximum: int,
+    ) -> tuple[int | None, str | None]:
+        if value in (None, ""):
+            return None, None
+        if isinstance(value, bool):
+            return None, f"{name} 必须是整数。"
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return None, f"{name} 必须是整数。"
+        if not minimum <= parsed <= maximum:
+            return None, f"{name} 必须在 {minimum}-{maximum} 之间。"
+        return parsed, None
+
+    @staticmethod
+    def _prompt_requests_animation(prompt: str) -> bool:
+        text = str(prompt or "").lower()
+        return bool(
+            re.search(r"(?<![a-z])gif(?![a-z])", text)
+            or any(
+                token in text
+                for token in ("animated gif", "animation", "动图", "循环动画")
+            )
+        )
+
+    @staticmethod
+    def _ensure_gif_params(params: dict) -> None:
+        """给 GIF 请求补齐帧数和帧时长；complexity 仅在显式配置时传递。"""
+        if params.get("frame_count") in (None, "", 0):
+            params["frame_count"] = 9
+        if params.get("frame_duration_ms") in (None, "", 0):
+            params["frame_duration_ms"] = 200
+
+    @classmethod
+    def _apply_animation_format(cls, params: dict) -> None:
+        """当提示词明确要动图且未指定格式时，默认请求 GIF。"""
+        output_format = str(params.get("output_format") or "").strip().lower()
+        if output_format in {"", "default"} and cls._prompt_requests_animation(
+            str(params.get("prompt") or "")
+        ):
+            params["output_format"] = "gif"
+        if str(params.get("output_format") or "").lower() == "gif":
+            cls._ensure_gif_params(params)
+
     async def _generate_result(
         self,
         plugin: BigBanana,
@@ -295,6 +443,8 @@ class BigBananaImageGenerationTool(BaseMediaGenerationTool):
                 )
                 if optimized_prompt is not None:
                     params["prompt"] = optimized_prompt
+
+            self._apply_animation_format(params)
 
             result = await plugin.drawing_pipeline.run(
                 params,

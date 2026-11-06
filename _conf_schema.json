@@ -1166,10 +1166,11 @@
                     "default",
                     "png",
                     "jpeg",
-                    "webp"
+                    "webp",
+                    "gif"
                 ],
                 "default": "default",
-                "hint": "OpenAI 图像输出格式。default 表示使用接口默认格式。"
+                "hint": "OpenAI 图像输出格式；gif 用于动图（gpt-image 2.6+ 支持，参考图编辑也可用）。default 表示使用接口默认格式。"
             },
             "output_compression": {
                 "description": "输出压缩程度",
@@ -1199,6 +1200,30 @@
                 ],
                 "default": "default",
                 "hint": "仅 OpenAI Responses 生图工具使用：auto 由模型判断，generate 强制生成，edit 强制编辑；default 表示不传递。"
+            },
+            "frame_count": {
+                "description": "GIF 帧数",
+                "type": "int",
+                "default": 9,
+                "hint": "仅在输出格式为 gif 时传递，范围 2-16。"
+            },
+            "frame_duration_ms": {
+                "description": "GIF 每帧时长（毫秒）",
+                "type": "int",
+                "default": 200,
+                "hint": "仅在输出格式为 gif 时传递，范围 20-2000，建议 10ms 步进。"
+            },
+            "complexity": {
+                "description": "GIF 渲染复杂度",
+                "type": "string",
+                "options": [
+                    "default",
+                    "low",
+                    "medium",
+                    "high"
+                ],
+                "default": "default",
+                "hint": "仅在输出格式为 gif 时传递；default 表示不传，可选 low/medium/high。"
             }
         }
     },
