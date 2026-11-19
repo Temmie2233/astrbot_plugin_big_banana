@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 from astrbot.api import logger
 
+from ..utils.animation import prompt_requests_animation
+
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
     from astrbot.api.star import Context
@@ -39,6 +41,12 @@ class SubBrainOptimizer:
         prompt: str,
     ) -> str | None:
         """调用副脑模型优化绘图提示词，失败时返回 None。"""
+        if prompt_requests_animation(prompt):
+            logger.info(
+                "[BIG BANANA] GIF/动图请求跳过副脑优化，保留原始动图指令"
+            )
+            return None
+
         provider_id = (
             self.sub_brain_config.provider_id
             or self._resolve_current_provider_id(event)

@@ -284,6 +284,8 @@ class DrawingCommandHandler:
                     is_command=True,
                     temporary_paths=temporary_paths,
                     temp_dir=self.plugin.temp_dir,
+                    expected_gif=str(params.get("output_format") or "").lower()
+                    == "gif",
                 )
 
             # 根据前台后台任务决定发送消息的方式

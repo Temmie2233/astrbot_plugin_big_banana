@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 import astrbot.api.message_components as Comp
 
+from ..utils.animation import ensure_gif_params, prompt_requests_animation
 from .mention_utils import (
     QQ_OFFICIAL_MENTION_RE,
     format_mention,
@@ -14,6 +15,16 @@ if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
 
     from ...main import BigBanana
+
+
+def _detect_gif_params(params: dict[str, Any]) -> None:
+    """提示词明确要求 GIF/动图时，自动补齐 output_format 和帧参数。"""
+    output_format = str(params.get("output_format") or "").strip().lower()
+    if output_format not in {"", "default"}:
+        return
+    if prompt_requests_animation(str(params.get("prompt") or "")):
+        params["output_format"] = "gif"
+        ensure_gif_params(params)
 
 
 def parse_params(plugin: BigBanana, event: AstrMessageEvent) -> dict[str, Any] | None:
@@ -90,6 +101,7 @@ def parse_params(plugin: BigBanana, event: AstrMessageEvent) -> dict[str, Any] |
             _collect_user_text(event, first_component_idx, first_text)
         )
         params["providers"] = provider_names
+        _detect_gif_params(params)
         return params
 
     # 复制预设参数，防止污染全局预设。
@@ -117,6 +129,7 @@ def parse_params(plugin: BigBanana, event: AstrMessageEvent) -> dict[str, Any] |
         # 更新参数
         params.update(user_params)
 
+    _detect_gif_params(params)
     return params
 
 

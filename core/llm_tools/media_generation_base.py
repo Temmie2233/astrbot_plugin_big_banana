@@ -242,6 +242,8 @@ class BaseMediaGenerationTool(FunctionTool[AstrAgentContext], ABC):
                     is_command=False,
                     temporary_paths=temporary_paths,
                     temp_dir=plugin.temp_dir,
+                    expected_gif=str(params.get("output_format") or "").lower()
+                    == "gif",
                 )
 
             if use_proactive_send:

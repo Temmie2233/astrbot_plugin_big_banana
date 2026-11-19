@@ -12,6 +12,7 @@ from astrbot.api import logger
 
 from ..drawing.saver import save_images_to_local
 from ..schemas import MAX_SIZE_B64_LEN, GenerationResult
+from .animation import is_gif_image
 
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
@@ -214,8 +215,9 @@ def build_result_message_chains(
     is_command: bool = True,
     temporary_paths: list[Path] | None = None,
     temp_dir: Path | None = None,
+    expected_gif: bool = False,
 ) -> list[list[BaseMessageComponent]]:
-    """构造结果消息链；QQ 多图拆成多条，并在发送前压缩图片。"""
+    """构造结果消息链；QQ 多图拆成多条，并可在非 GIF 结果时追加提示。"""
     platform_meta = getattr(event, "platform_meta", None)
     platform_name = getattr(platform_meta, "name", None) if platform_meta else None
     images_with_bytes = [image for image in result.images if image.bytes]
@@ -227,7 +229,7 @@ def build_result_message_chains(
         or any(video.url for video in result.videos)
         or not images_with_bytes
     ):
-        return [
+        chains = [
             build_result_message_chain(
                 event,
                 result=result,
@@ -238,20 +240,28 @@ def build_result_message_chains(
                 temp_dir=temp_dir,
             )
         ]
-
-    chains: list[list[BaseMessageComponent]] = []
-    for index, image in enumerate(images_with_bytes):
-        compressed = _compress_image_for_qq(image.bytes)
-        encoded = base64.b64encode(compressed).decode("ascii")
-        chains.append(
-            build_message_chain(
-                event,
-                components=[Comp.Image.fromBase64(encoded)],
-                quote_reply_mode=quote_reply_mode if index == 0 else "none",
-                is_command=is_command,
+    else:
+        chains = []
+        for index, image in enumerate(images_with_bytes):
+            compressed = _compress_image_for_qq(image.bytes)
+            encoded = base64.b64encode(compressed).decode("ascii")
+            chains.append(
+                build_message_chain(
+                    event,
+                    components=[Comp.Image.fromBase64(encoded)],
+                    quote_reply_mode=quote_reply_mode if index == 0 else "none",
+                    is_command=is_command,
+                )
             )
-        )
+        if len(chains) > 1:
+            logger.info(f"[BIG BANANA] QQ 多图拆分为 {len(chains)} 条消息发送")
 
-    if len(chains) > 1:
-        logger.info(f"[BIG BANANA] QQ 多图拆分为 {len(chains)} 条消息发送")
+    if expected_gif and result.images and not any(
+        is_gif_image(image) for image in result.images
+    ):
+        logger.warning("[BIG BANANA] 请求 GIF，但 provider 返回的不是 GIF")
+        if chains:
+            chains[-1].append(
+                Comp.Plain("⚠️ 提供方返回的是静态图，未生成 GIF。")
+            )
     return chains
