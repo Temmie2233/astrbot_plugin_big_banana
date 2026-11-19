@@ -13,7 +13,10 @@ from ...drawing import (
 )
 from ...drawing.collector import ImageCollector
 from ...schemas import GenerationResult
-from ...utils import build_message_chain, build_result_message_chain
+from ...utils import (
+    build_message_chain,
+    build_result_message_chains,
+)
 from ...video import prepare_video_delivery
 from .gather_session import DrawingGatherSession
 
@@ -263,15 +266,17 @@ class DrawingCommandHandler:
                     == "video_generation"
                     else "图片"
                 )
-                msg_chain = build_message_chain(
-                    event,
-                    Comp.Plain(f"❌ {media_name}生成失败：{result.error_message}"),
-                    quote_reply_mode=self.plugin.preference_config.quote_reply_mode,
-                    is_command=True,
-                )
+                msg_chains = [
+                    build_message_chain(
+                        event,
+                        Comp.Plain(f"❌ {media_name}生成失败：{result.error_message}"),
+                        quote_reply_mode=self.plugin.preference_config.quote_reply_mode,
+                        is_command=True,
+                    )
+                ]
             else:
-                # 构建消息链
-                msg_chain = build_result_message_chain(
+                # 构建消息链；QQ 多图会在内部压缩并拆成多条。
+                msg_chains = build_result_message_chains(
                     event,
                     result=result,
                     url_only=url_only,
@@ -287,12 +292,14 @@ class DrawingCommandHandler:
                 and self.plugin.preference_config.background_task_send_type == "active"
             ):
                 # 后台任务且配置为主动消息发送
-                await self.plugin.context.send_message(
-                    event.unified_msg_origin, MessageChain(msg_chain)
-                )
+                for msg_chain in msg_chains:
+                    await self.plugin.context.send_message(
+                        event.unified_msg_origin, MessageChain(msg_chain)
+                    )
             else:
                 # 同步任务，或后台任务且配置为事件消息发送（默认）
-                await event.send(event.chain_result(msg_chain))
+                for msg_chain in msg_chains:
+                    await event.send(event.chain_result(msg_chain))
         finally:
             # 任务结束，清理
             if self.plugin.preference_config.command_use_background_task:

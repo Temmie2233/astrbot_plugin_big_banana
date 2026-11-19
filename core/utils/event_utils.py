@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import base64
+from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import astrbot.api.message_components as Comp
+from PIL import Image as PILImage
+from PIL import ImageOps
 from astrbot.api import logger
 
 from ..drawing.saver import save_images_to_local
@@ -12,6 +16,66 @@ from ..schemas import MAX_SIZE_B64_LEN, GenerationResult
 if TYPE_CHECKING:
     from astrbot.api.event import AstrMessageEvent
     from astrbot.core.message.components import BaseMessageComponent
+
+
+# QQ/NapCat 的富媒体上传对图片大小很敏感。发送前压缩到接近此前稳定成功的尺寸，
+# 同时避免一次 sendMsg 携带多张大图。
+_QQ_SEND_MAX_SIDE = 1600
+_QQ_SEND_MAX_BYTES = 3 * 1024 * 1024
+_QQ_SEND_MIN_QUALITY = 55
+
+
+def _compress_image_for_qq(image_bytes: bytes) -> bytes:
+    """把静态图片压缩到 QQ 可稳定上传的尺寸和体积；失败时退回原图。"""
+    try:
+        with PILImage.open(BytesIO(image_bytes)) as image:
+            if getattr(image, "is_animated", False) or getattr(image, "n_frames", 1) > 1:
+                logger.info("[BIG BANANA] 多帧图片不压缩，按原图发送")
+                return image_bytes
+
+            original_size = len(image_bytes)
+            width, height = image.size
+            if original_size <= _QQ_SEND_MAX_BYTES and max(width, height) <= _QQ_SEND_MAX_SIDE:
+                return image_bytes
+
+            clean = ImageOps.exif_transpose(image).copy()
+            has_alpha = clean.mode in {"RGBA", "LA"} or (
+                clean.mode == "P" and "transparency" in clean.info
+            )
+            if has_alpha:
+                rgba = clean.convert("RGBA")
+                background = PILImage.new("RGB", rgba.size, (255, 255, 255))
+                background.paste(rgba, mask=rgba.getchannel("A"))
+                clean = background
+            else:
+                clean = clean.convert("RGB")
+
+            resample = getattr(PILImage, "Resampling", PILImage).LANCZOS
+            if max(clean.size) > _QQ_SEND_MAX_SIDE:
+                clean.thumbnail((_QQ_SEND_MAX_SIDE, _QQ_SEND_MAX_SIDE), resample)
+
+            output = BytesIO()
+            for quality in (85, 75, 65, _QQ_SEND_MIN_QUALITY):
+                output = BytesIO()
+                clean.save(output, format="JPEG", quality=quality, optimize=True)
+                if output.tell() <= _QQ_SEND_MAX_BYTES:
+                    break
+            else:
+                # 极端复杂图片再缩一档，避免仍超过 NapCat 的富媒体限制。
+                clean.thumbnail((1280, 1280), resample)
+                output = BytesIO()
+                clean.save(output, format="JPEG", quality=75, optimize=True)
+
+            compressed = output.getvalue()
+            logger.info(
+                "[BIG BANANA] QQ 发送前压缩图片: "
+                f"{width}x{height} {original_size} -> "
+                f"{clean.width}x{clean.height} {len(compressed)} bytes"
+            )
+            return compressed
+    except Exception as exc:
+        logger.warning(f"[BIG BANANA] QQ 图片压缩失败，按原图发送: {exc}")
+        return image_bytes
 
 
 def get_message_id(event: AstrMessageEvent) -> str | None:
@@ -140,3 +204,54 @@ def build_result_message_chain(
     else:
         msg_chain.append(Comp.Plain("❌ 图片生成失败：响应中未包含图片数据"))
     return msg_chain
+
+
+def build_result_message_chains(
+    event: AstrMessageEvent,
+    result: GenerationResult,
+    url_only: bool = False,
+    quote_reply_mode: str = "both",
+    is_command: bool = True,
+    temporary_paths: list[Path] | None = None,
+    temp_dir: Path | None = None,
+) -> list[list[BaseMessageComponent]]:
+    """构造结果消息链；QQ 多图拆成多条，并在发送前压缩图片。"""
+    platform_meta = getattr(event, "platform_meta", None)
+    platform_name = getattr(platform_meta, "name", None) if platform_meta else None
+    images_with_bytes = [image for image in result.images if image.bytes]
+
+    # 视频、URL-only、其他平台和 Telegram 的大图/文件逻辑继续走原路径。
+    if (
+        platform_name != "aiocqhttp"
+        or url_only
+        or any(video.url for video in result.videos)
+        or not images_with_bytes
+    ):
+        return [
+            build_result_message_chain(
+                event,
+                result=result,
+                url_only=url_only,
+                quote_reply_mode=quote_reply_mode,
+                is_command=is_command,
+                temporary_paths=temporary_paths,
+                temp_dir=temp_dir,
+            )
+        ]
+
+    chains: list[list[BaseMessageComponent]] = []
+    for index, image in enumerate(images_with_bytes):
+        compressed = _compress_image_for_qq(image.bytes)
+        encoded = base64.b64encode(compressed).decode("ascii")
+        chains.append(
+            build_message_chain(
+                event,
+                components=[Comp.Image.fromBase64(encoded)],
+                quote_reply_mode=quote_reply_mode if index == 0 else "none",
+                is_command=is_command,
+            )
+        )
+
+    if len(chains) > 1:
+        logger.info(f"[BIG BANANA] QQ 多图拆分为 {len(chains)} 条消息发送")
+    return chains

@@ -13,7 +13,10 @@ from astrbot.core.message.message_event_result import MessageChain
 
 from ..drawing.collector import ImageCollector
 from ..schemas import GenerationResult
-from ..utils import build_message_chain, build_result_message_chain
+from ..utils import (
+    build_message_chain,
+    build_result_message_chains,
+)
 from ..video import prepare_video_delivery
 
 if TYPE_CHECKING:
@@ -222,14 +225,16 @@ class BaseMediaGenerationTool(FunctionTool[AstrAgentContext], ABC):
     ) -> str:
         try:
             if result.error_message:
-                msg_chain = build_message_chain(
-                    event,
-                    Comp.Plain(f"❌ {self.media_name}生成失败：{result.error_message}"),
-                    quote_reply_mode=plugin.preference_config.quote_reply_mode,
-                    is_command=False,
-                )
+                msg_chains = [
+                    build_message_chain(
+                        event,
+                        Comp.Plain(f"❌ {self.media_name}生成失败：{result.error_message}"),
+                        quote_reply_mode=plugin.preference_config.quote_reply_mode,
+                        is_command=False,
+                    )
+                ]
             else:
-                msg_chain = build_result_message_chain(
+                msg_chains = build_result_message_chains(
                     event,
                     result=result,
                     url_only=params.get("url", plugin.params_config.url),
@@ -240,12 +245,14 @@ class BaseMediaGenerationTool(FunctionTool[AstrAgentContext], ABC):
                 )
 
             if use_proactive_send:
-                await plugin.context.send_message(
-                    event.unified_msg_origin,
-                    MessageChain(msg_chain),
-                )
+                for msg_chain in msg_chains:
+                    await plugin.context.send_message(
+                        event.unified_msg_origin,
+                        MessageChain(msg_chain),
+                    )
             else:
-                await event.send(event.chain_result(msg_chain))
+                for msg_chain in msg_chains:
+                    await event.send(event.chain_result(msg_chain))
         except Exception as exc:
             logger.error(
                 f"[BIG BANANA] {self.generation_name}结果发送失败: {exc}",
