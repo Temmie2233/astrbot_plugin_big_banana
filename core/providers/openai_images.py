@@ -95,9 +95,11 @@ class OpenAIImagesProvider(StandardProvider):
                 )
                 if input_fidelity not in (None, "", "default"):
                     data["input_fidelity"] = input_fidelity
-            data["moderation"] = self.params.get(
+            moderation = self.params.get(
                 "moderation", self.plugin.params_config.moderation
             )
+            if isinstance(moderation, str) and moderation not in ("", "default"):
+                data["moderation"] = moderation
             if is_gif and not is_catbee:
                 self._add_gif_params(data)
         if self.provider_config.stream:
@@ -176,9 +178,11 @@ class OpenAIImagesProvider(StandardProvider):
             )
             if output_compression not in (None, "", -1):
                 context["output_compression"] = output_compression
-            context["moderation"] = self.params.get(
+            moderation = self.params.get(
                 "moderation", self.plugin.params_config.moderation
             )
+            if isinstance(moderation, str) and moderation not in ("", "default"):
+                context["moderation"] = moderation
             if is_gif and not is_catbee:
                 self._add_gif_params(context)
         # 此参数仅支持dall-e-2 / dall-e-3
